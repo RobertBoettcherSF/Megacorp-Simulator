@@ -5,6 +5,7 @@ with Ada.Command_Line;
 with Ada.Text_IO;
 with Megacorp.Host;
 with Megacorp.Map;
+with Megacorp.Map.Gen;
 with Megacorp.Mission;
 with Megacorp.Parameters;
 with Megacorp.RNG;
@@ -65,7 +66,7 @@ begin
          Seed : Megacorp.RNG.Word;
          Ticks : Natural := 200;
          City : Megacorp.Map.City :=
-           Megacorp.Map.Test_Layout (1, P);
+           Megacorp.Map.Gen.Generate (1, P);
          Run : Megacorp.Mission.Trace;
       begin
          Seed := Megacorp.RNG.Word'Value
@@ -85,7 +86,7 @@ begin
          if Ticks < 1 then
             Ticks := 1;
          end if;
-         City := Megacorp.Map.Test_Layout (Seed, P);
+         City := Megacorp.Map.Gen.Generate (Seed, P);
          Run := Megacorp.Mission.Demonstration (City, Seed, Ticks);
          Megacorp.Mission.Put
            (Ada.Text_IO.Standard_Output, Seed, Run.Outcome);
@@ -98,10 +99,10 @@ begin
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
       end;
    elsif Ada.Command_Line.Argument_Count = 0 then
-      Ada.Text_IO.Put_Line ("sample map seed 42 (test layout)");
+      Ada.Text_IO.Put_Line ("sample map seed 42 (generated city)");
       Ada.Text_IO.Put_Line
         ("legend: . open  + road  = pavement  B building  ~ water");
-      Megacorp.Map.Put_Sample (Megacorp.Map.Test_Layout (42, P));
+      Megacorp.Map.Put_Sample (Megacorp.Map.Gen.Generate (42, P));
    else
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Current_Error,

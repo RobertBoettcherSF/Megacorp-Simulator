@@ -7,8 +7,8 @@ use type Megacorp.RNG.Word;
 
 --  Item 3. One city tile map.
 --  X increases east, Y increases south, both counted from 1.
---  Test_Layout is a seeded stand-in. The city-block generator
---  (item 13) replaces it later.
+--  Test_Layout is the older grid, kept for its unit checks.
+--  Megacorp.Map.Gen is the city the export and the demos use.
 package Megacorp.Map is
    type Terrain is
      (Open_Ground, Road, Pavement, Building, Water);
