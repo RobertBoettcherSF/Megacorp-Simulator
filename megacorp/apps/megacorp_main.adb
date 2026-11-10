@@ -7,6 +7,7 @@ with Megacorp.Host;
 with Megacorp.Map;
 with Megacorp.Map.Gen;
 with Megacorp.Mission;
+with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.RNG;
 
@@ -87,7 +88,7 @@ begin
             Ticks := 1;
          end if;
          City := Megacorp.Map.Gen.Generate (Seed, P);
-         Run := Megacorp.Mission.Demonstration (City, Seed, Ticks);
+         Run := Megacorp.Mission.Gen.Play (City, Seed, Ticks);
          Megacorp.Mission.Put
            (Ada.Text_IO.Standard_Output, Seed, Run.Outcome);
       exception
