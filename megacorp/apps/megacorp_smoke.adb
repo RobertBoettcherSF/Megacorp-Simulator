@@ -27,6 +27,7 @@ with Megacorp.Parameters;
 with Megacorp.RNG;
 with Megacorp.Save;
 with Megacorp.Save.Log;
+with Megacorp.Save.Migrate;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -51,9 +52,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.18.0"
+     (Megacorp.Version = "0.19.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.18.0");
+      "version 0.19.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -663,7 +664,7 @@ begin
          while Mark <= Raw'Last and then Raw (Mark) /= ' ' loop
             Mark := Mark + 1;
          end loop;
-         Next (Mark + 1) := '2';
+         Next (Mark + 1) := '3';
          Native.Write (Root, "next.mgc", Next);
       end;
       Smoke_Check.Expect
@@ -1024,6 +1025,171 @@ begin
             and then Match (Lived, Straight)
             and then Match (Again, Straight),
             "a full log compacts to the same world");
+      end;
+   end;
+
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Camp renames Megacorp.World.Campaign;
+      package Globe renames Megacorp.World.Gen;
+      package Journal renames Megacorp.Save.Log;
+      package Move renames Megacorp.Save.Migrate;
+
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean;
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean
+      is
+      begin
+         for C in 1 .. Left.Corps loop
+            if Left.Company (C).Cash /= Right.Company (C).Cash
+              or else Left.Company (C).Eliminated
+                /= Right.Company (C).Eliminated
+            then
+               return False;
+            end if;
+         end loop;
+         for I in 1 .. Left.Regions loop
+            if Left.Area (I).Owner /= Right.Area (I).Owner
+              or else Left.Area (I).Tax /= Right.Area (I).Tax
+              or else Left.Area (I).Unrest /= Right.Area (I).Unrest
+              or else Left.Area (I).Defence /= Right.Area (I).Defence
+              or else Left.Area (I).Tech /= Right.Area (I).Tech
+              or else Left.Area (I).City /= Right.Area (I).City
+            then
+               return False;
+            end if;
+         end loop;
+         return True;
+      end Match;
+
+      function Rejected (Name, Expect : String) return Boolean;
+      function Rejected (Name, Expect : String) return Boolean is
+         Root : constant Native.Disk :=
+           Native.Open ("/tmp/megacorp-migrate");
+         Back : Megacorp.Save.Snapshot;
+      begin
+         Back := Megacorp.Save.Load (Root, Name);
+         return Back.Day = Natural'Last;
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            return Ada.Exceptions.Exception_Message (Error) = Expect;
+      end Rejected;
+
+      Root : constant Native.Disk := Native.Open ("tests");
+      Snap : Megacorp.Save.Snapshot;
+   begin
+      Ada.Directories.Create_Path ("/tmp/megacorp-migrate");
+      Smoke_Check.Expect
+        (Move.Note (1, 2) = "migrated save from version 1 to 2",
+         "migration note");
+      declare
+         Raw : constant String := Native.Read (Root, "v1-slot.mgc");
+         Next : constant String := Move.To_Current (Raw);
+         Study : Boolean := True;
+      begin
+         Snap := Megacorp.Save.Load (Root, "v1-slot.mgc");
+         for C in 1 .. Snap.Corps loop
+            Study := Study and then Snap.Company (C).Research = 0;
+         end loop;
+         Smoke_Check.Expect
+           (Move.Listed_Version (Raw) = 1
+            and then Move.Listed_Version (Next) = 2
+            and then Move.Sum_Ok (Next)
+            and then Move.To_Current (Next) = Next
+            and then Ada.Strings.Fixed.Index (Next, "algorithm 1") > 0
+            and then Snap.Algorithm = Globe.Current_Algorithm
+            and then Snap.Day = 0
+            and then Snap.Stamp (1 .. Snap.Stamp_Len) = "0.18.0"
+            and then Study,
+            "a v1 fixture migrates to v2");
+      end;
+      declare
+         Played : Megacorp.World.Atlas :=
+           Megacorp.Save.Rebuild (Snap, Defaults);
+         Straight : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Book : Journal.Journal :=
+           Journal.Load (Root, "v1-slot.log");
+      begin
+         Journal.Replay (Snap, Played, Book);
+         Camp.Run (Straight, 4);
+         Smoke_Check.Expect
+           (Journal.Notice (Book) = ""
+            and then Snap.Day = 4
+            and then Match (Played, Straight),
+            "a v1 log replays after migration");
+      end;
+      declare
+         World : constant Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Disk : Native.Disk :=
+           Native.Open ("/tmp/megacorp-migrate");
+         Back : Megacorp.Save.Snapshot;
+         Raw : String (1 .. 8192);
+         Last : Natural;
+         Mark : Natural;
+      begin
+         Snap := Megacorp.Save.Capture
+           (World, 0, Params.Auto_Play);
+         Snap.Company (1).Research := 5;
+         Megacorp.Save.Store (Disk, "v2.mgc", Snap);
+         Back := Megacorp.Save.Load (Disk, "v2.mgc");
+         Smoke_Check.Expect
+           (Megacorp.Save.Same (Snap, Back)
+            and then Back.Company (1).Research = 5
+            and then Back.Algorithm = 1,
+            "a v2 snapshot round-trips");
+         declare
+            Text : constant String := Native.Read (Disk, "v2.mgc");
+         begin
+            Last := Text'Length;
+            Raw (1 .. Last) := Text;
+         end;
+         Mark := Raw'First;
+         while Mark <= Last and then Raw (Mark) /= ' ' loop
+            Mark := Mark + 1;
+         end loop;
+         Raw (Mark + 1) := '3';
+         Native.Write (Disk, "future.mgc", Raw (1 .. Last));
+         Smoke_Check.Expect
+           (Rejected ("future.mgc", "wrong format version"),
+            "a future format version is refused");
+      end;
+      declare
+         Old : constant Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults, 1);
+         Next : constant Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults, 2);
+         Held : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Next, 0, Params.Auto_Play, 2);
+         Built : constant Megacorp.World.Atlas :=
+           Megacorp.Save.Rebuild (Held, Defaults);
+         Raised : Boolean := False;
+      begin
+         Smoke_Check.Expect
+           (Old.Area (1).City /= Next.Area (1).City
+            and then not Held.Area (1).Has_City
+            and then Built.Area (1).City = Next.Area (1).City
+            and then Built.Area (1).City /= Old.Area (1).City,
+            "the stamped generator version is honoured");
+         Held.Algorithm := 9;
+         begin
+            declare
+               Ignored : constant Megacorp.World.Atlas :=
+                 Megacorp.Save.Rebuild (Held, Defaults);
+               pragma Unreferenced (Ignored);
+            begin
+               Raised := False;
+            end;
+         exception
+            when Error : Megacorp.Save.Save_Error =>
+               Raised :=
+                 Ada.Exceptions.Exception_Message (Error)
+                   = "unknown generator version";
+         end;
+         Smoke_Check.Expect
+           (Raised, "an unknown generator version is refused");
       end;
    end;
 

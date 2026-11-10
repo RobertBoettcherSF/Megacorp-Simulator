@@ -6,16 +6,19 @@ with Megacorp.Map;
 with Megacorp.Parameters;
 with Megacorp.RNG;
 with Megacorp.World;
+with Megacorp.World.Gen;
 use type Megacorp.RNG.Word;
 
---  Item 17. Format version 1: the master seed, plus the fields
+--  Item 17. The snapshot is the master seed plus the fields
 --  play can change. Names, roads, and an untouched city are
---  rebuilt from the seed. A re-rolled city seed and finished
---  mission marks are optional tail fields, still version 1.
+--  rebuilt from the stamped generator algorithm.
 --  Item 18 records the changes since this snapshot.
---  Item 19 will migrate a later version.
+--  Item 19. Format version 2 adds research points. A v1 file
+--  migrates forward. A newer file is refused.
 package Megacorp.Save is
-   Format_Version : constant := 1;
+   Format_Version : constant := 2;
+
+   Stamp_Max : constant := 24;
 
    --  A plain 40-region snapshot is about 1 KiB, including the
    --  missions line. One ruined tile adds one patch line.
@@ -53,6 +56,7 @@ package Megacorp.Save is
       Earned     : Natural := 0;
       Spent      : Natural := 0;
       Eliminated : Boolean := False;
+      Research   : Natural := 0;
    end record;
 
    type Patch is record
@@ -92,14 +96,20 @@ package Megacorp.Save is
       Patch    : Patch_Table;
       Squad    : Natural := Squad_Size;
       Agent    : Squad_Table;
-      Missions : Natural := 0;
-      Mission  : Mission_Table;
+      Missions  : Natural := 0;
+      Mission   : Mission_Table;
+      Algorithm : Positive := World.Gen.Current_Algorithm;
+      Stamp_Len : Natural := 0;
+      Stamp     : String (1 .. Stamp_Max) := (others => ' ');
    end record;
 
    function Capture
      (Item : World.Atlas;
       Day : Natural;
-      Play : Parameters.Play_Mode) return Snapshot;
+      Play : Parameters.Play_Mode;
+      Algorithm : Positive := World.Gen.Current_Algorithm)
+      return Snapshot
+     with Pre => Algorithm <= World.Gen.Max_Algorithm;
 
    --  Copy the mutable world fields. Patches, the squad, and
    --  mission marks stay. A city seed that is not the generated
@@ -149,6 +159,25 @@ package Megacorp.Save is
      with Pre => Data.Virtual_FS.Exists (Disk, Path);
 
    function Image (Snap : Snapshot) return String;
+
+   --  Checksum of the v1 bytes of this snapshot. A log written
+   --  before migration still matches.
+   function Legacy_Seal (Snap : Snapshot) return RNG.Word;
+
+   function Digest (Text : String) return RNG.Word;
+
+   --  Rebuild derived fields with the stamped algorithm, then
+   --  copy the saved fields back.
+   function Rebuild
+     (Snap : Snapshot;
+      Size : Parameters.Generator_Parameters) return World.Atlas
+     with Pre =>
+       Parameters.Region_Count (Size) = Snap.Regions
+       and then Parameters.Corporation_Count (Size) = Snap.Corps,
+       Post =>
+         Rebuild'Result.Seed = Snap.Seed
+         and then Rebuild'Result.Regions = Snap.Regions
+         and then Rebuild'Result.Corps = Snap.Corps;
 
    function Same (Left, Right : Snapshot) return Boolean;
 

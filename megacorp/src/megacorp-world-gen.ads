@@ -9,17 +9,31 @@ use type Megacorp.RNG.Word;
 --  Item 15. A world from the World and Region child streams.
 --  Names are built from our own syllables. No real brand is used.
 package Megacorp.World.Gen is
+   --  Algorithm 1 is the world built in 0.15.0. Algorithm 2
+   --  changes only the city seed, so a stamp can be told apart.
+   --  New games stay on algorithm 1. See DESIGN.md.
+   Current_Algorithm : constant := 1;
+   Max_Algorithm     : constant := 2;
+
    function Connected (Item : Atlas) return Boolean;
 
    function Distinct_Homes (Item : Atlas) return Boolean;
 
+   function City_Of
+     (Seed : RNG.Word;
+      Algorithm : Positive;
+      Region : Positive) return RNG.Word
+     with Pre => Algorithm <= Max_Algorithm;
+
    function Generate
      (Seed : RNG.Word;
-      Size : Parameters.Generator_Parameters) return Atlas
+      Size : Parameters.Generator_Parameters;
+      Algorithm : Positive := Current_Algorithm) return Atlas
      with Pre =>
        Parameters.Region_Count (Size) <= Parameters.Max_Regions
        and then Parameters.Corporation_Count (Size)
-         <= Parameters.Max_Corporations,
+         <= Parameters.Max_Corporations
+       and then Algorithm <= Max_Algorithm,
        Post =>
          Generate'Result.Seed = Seed
          and then Generate'Result.Regions

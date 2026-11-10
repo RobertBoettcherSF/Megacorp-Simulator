@@ -743,7 +743,10 @@ package body Megacorp.Save.Log is
       Book : in out Journal)
    is
    begin
-      if Book.Base /= 0 and then Book.Base /= Seal (Snap) then
+      if Book.Base /= 0
+        and then Book.Base /= Seal (Snap)
+        and then Book.Base /= Legacy_Seal (Snap)
+      then
          return;
       end if;
       Data.Virtual_FS.Write (Disk, Path, Header (Snap));
@@ -782,7 +785,9 @@ package body Megacorp.Save.Log is
       if Book.Count = 0 and then Book.Base = 0 then
          return;
       end if;
-      if Book.Base /= Seal (Snap) then
+      if Book.Base /= Seal (Snap)
+        and then Book.Base /= Legacy_Seal (Snap)
+      then
          Book.Ignored := True;
          Host.Log (Host.Warning, Base_Note);
          return;
