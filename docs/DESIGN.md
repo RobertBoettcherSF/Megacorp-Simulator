@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.10.0, item 10
+
+`Megacorp.Behaviour` is a mood on each ped, stepped after the action queue. Civilians wander, then flee from a shot inside 8 tiles. Panic spreads 4 tiles to another civilian. Guards walk a patrol and shoot a hostile they can see. Police who can see an armed hostile warn for 12 ticks, then fire. Police who only hear a shot walk toward it. An agent standing next to a calm civilian persuades them after 8 ticks; the civilian then follows and does not flee. Each ped draws from its own child of the scene seed.
+
+`bin/megacorp --export` adds that trace to seeds 1, 42, and 100. The page colours the marker by role and prints the mood. It does not decide.
+
 ### 2026-11-10 — version 0.9.0, item 9
 
 `Megacorp.Vehicles` is a car and a van. A car has health 80, speed 2, and two seats. A van has health 120, speed 1, and four seats. Speed is sub-tile steps per tick, the same eight steps per tile a ped uses. The vehicle stores a tile, a facing, that step count, and health. It drives with `Megacorp.Path` in Drive mode, so every step is a road tile.
@@ -120,6 +126,24 @@ This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 202
 
 **Page.** Seeds 1, 42, and 100 gain a Vehicles trace. One ped walks to the car, enters, drives, and exits. A passenger who started in the car rides along. A second ped shoots a van; the van stops and its passenger steps out. The page draws a teal rectangle for the car and a longer amber one for the van. Grey is a wreck. A second rider is drawn a few pixels aside so both show; the trace stores one tile. The older views stay.
 
+### Item 10 — behaviour
+
+**Machine.** One mood per ped, updated after `Actions.Tick`. A new order replaces the queue and starts on the next tick, the same rule as a player order. The alternative was a second queue inside the behaviour package. It was left out so walk, shoot, turn, and follow stay the actions we already test.
+
+**Roles.** Civilian, guard, police, hostile, agent. A hostile is the armed threat. Police do not warn guards or agents for carrying a gun. The alternative was "anyone with ammo". It was left out so a guard and an officer can stand in the same street.
+
+**Radii.** Hearing 8 tiles, sight 6, panic spread 4. All Chebyshev. Sight is shorter than the pistol's reach of 8, so a guard does not fire at someone this machine cannot see. Hearing is wider than sight, so a shot carries past vision and a police officer who cannot see the shooter walks toward the noise. Panic does not check the wall; a civilian within 4 tiles of someone already fleeing flees too. The alternative was to require a clear line. It was left out so fear can turn a corner.
+
+**Warning.** The reference waits about 5 seconds. This build waits 12 ticks. At a 33 ms tick that is under half a second, and on the page it is long enough to read "warn" before the shot. A 151-tick wait (5 seconds of 33 ms ticks) was the other choice. It would have made the exported trace mostly standing still.
+
+**Flee and wander.** Flee steps straight away on the stronger axis, up to 5 tiles, then the ped calms if the noise is gone. Wander, every 8th tick while calm, picks an orthogonal walkable neighbour from that ped's child stream (`Mission` domain, key = ped id). A search of every farther tile was the alternative for flee. The straight step is enough to leave the shot and needs one path.
+
+**Patrol and engage.** A guard walks the two ends of a short route, and that route repeats. If the two ends are the same tile, the guard stands there between fights. The fighting guard in the street demo is set up that way, so a finished shot does not send them to the corner of the map. A hostile in sight and in range replaces the patrol with `Shoot_At` until the hostile is gone. Hostiles shoot the nearest living person in sight and range. They do not chase, so a guard further down the same road keeps patrolling.
+
+**Persuasion.** An agent next to a calm or wandering civilian for 8 ticks sets that civilian to persuaded. The civilian follows the agent and ignores gunfire. There is no chance roll. The alternative was a roll. It was left out so the smoke test can name the tick.
+
+**Page.** Seeds 1, 42, and 100 gain a Behaviour trace on the first road column: two civilians flee a shot, one guard patrols, another guard shoots a second hostile, and a police officer warns then fires. Both bystanders are inside earshot; the smoke test is the one that places a civilian outside earshot and inside the spread radius. Gold is a civilian, orange a guard, blue police, red a hostile. The mood is printed in brackets. The older views stay.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -130,7 +154,7 @@ This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 202
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–9 (version 0.9.0) are implemented under `megacorp/`. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–10 (version 0.10.0) are implemented under `megacorp/`. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -495,7 +519,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 7. **Action queue.** Done in 0.7.0. A ped has a fixed-capacity queue of walk, wait, turn, follow, and pick-up. One action runs per tick. Failure clears the queue and the ped stands. Orders replace the queue or append, and take effect on the next tick. Depends on: 6. Try: the smoke test, and the browser page's scripted mission for seeds 1, 42, and 100. Size: medium (`ia/action` + `pedactions` ~2,000+ lines). Vehicles and shooting stay later.
 8. **Weapons, shots, damage, death.** Done in 0.8.0 for pistol, SMG, and rifle, ped health, a seeded hit/miss roll, and building line-of-sight. `Shoot_At` fires until the target is down, out of reach, blocked, or out of ammo. Depends on: 6, 2. Try: the smoke test, and the browser page's firefight for seeds 1, 42, and 100. Size: medium.
 9. **Vehicles.** Done in 0.9.0. A car and a van drive on roads, peds enter and exit, passengers move with the vehicle, the vehicle blocks its tiles, and shots destroy it and eject the passengers. Depends on: 7. Try: the smoke test, and the browser page's vehicle trace for seeds 1, 42, and 100. Size: medium.
-10. **Behaviour components.** Civilian panic, police wait-and-warn, persuader/persuaded. Depends on: 7, 8. Try: armed ped in sight of police produces a warning then fire after a documented delay (the reference uses 5 seconds; our delay is chosen when this item is written). Size: medium (`ia/behaviour` 412+ headers, plus ped hooks).
+10. **Behaviour components.** Done in 0.10.0. Civilians wander and flee, panic spreads by radius, guards patrol and engage, police warn for 12 ticks then fire, and an agent can persuade a neighbour. Depends on: 7, 8. Try: the smoke test, and the browser page's behaviour trace for seeds 1, 42, and 100. Size: medium.
 11. **Mission loop.** Start, fixed ticks, objectives, success/fail, stats. Headless runner: seed, inputs, N ticks, dump state. Depends on: 7–10. Try: a fixture mission (hand-built map) completes from a recorded input file. Size: medium-large (`mission.cpp` 3,197 in the reference tree).
 12. **Comparison harness (optional but valuable).** Dump selected reference-tree state (positions, health, objective flags) vs Ada on a tiny hand-built fixture. Depends on: 11. Try: a diff report. Size: small tooling. Can lag if the C++ tree is hard to build.
 

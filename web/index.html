@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.9.0</title>
+  <title>Megacorp Simulator 0.10.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -77,7 +77,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.9.0</span>
+    <p class="meta">version <span id="version">0.10.0</span>
       · seed <span id="seed-label">…</span></p>
   </header>
   <div class="controls">
@@ -109,7 +109,10 @@
     a ped is health. A red shot line is a hit and a dashed line is a
     miss. The gold diamond is an item until it is picked up.
     A teal rectangle is a car and an amber one is a van. Grey means
-    a wreck. A click snaps to the nearest prepared start or goal. The
+    a wreck. On the behaviour trace, colour is the role: gold
+    civilian, orange guard, blue police, red hostile. The word in
+    brackets is that ped's mood. A click snaps to the nearest
+    prepared start or goal. The
     layout is the seeded test map, not the later city-block generator.</p>
   <script src="js/map.js"></script>
 </body>

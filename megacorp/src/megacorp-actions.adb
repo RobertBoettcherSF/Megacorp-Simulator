@@ -331,6 +331,39 @@ package body Megacorp.Actions is
       return Peds.Ammo_Of (A.Walker);
    end Ped_Ammo;
 
+   function Ran (A : Actor) return Boolean is
+   begin
+      return A.Has_Action;
+   end Ran;
+
+   function Ran_Action (A : Actor) return String is
+   begin
+      if not A.Has_Action then
+         return "";
+      end if;
+      return Token_Strings.To_String (A.Action);
+   end Ran_Action;
+
+   function Shot_This_Tick (A : Actor) return Boolean is
+   begin
+      return A.Fired_Now;
+   end Shot_This_Tick;
+
+   function Shot_Landed (A : Actor) return Boolean is
+   begin
+      return A.Fired_Hit;
+   end Shot_Landed;
+
+   function Shot_X (A : Actor) return Positive is
+   begin
+      return A.Fired_X;
+   end Shot_X;
+
+   function Shot_Y (A : Actor) return Positive is
+   begin
+      return A.Fired_Y;
+   end Shot_Y;
+
    function Distinct (Group : Cast) return Boolean is
    begin
       for I in Group'Range loop
