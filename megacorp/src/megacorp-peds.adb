@@ -1,8 +1,6 @@
 --  SPDX-License-Identifier: MIT
 --  Copyright (c) 2026 Robert Boettcher
 
-with Megacorp.Path;
-
 package body Megacorp.Peds is
    use type Path.Status;
 
@@ -13,10 +11,19 @@ package body Megacorp.Peds is
      (Group : Crowd; Self : Positive; X, Y : Positive) return Boolean;
    function Blocker_Id
      (Group : Crowd; Self : Positive; X, Y : Positive) return Natural;
+   function Listed
+     (Blocked : Path.Block_Lists.Vector;
+      X, Y : Positive) return Boolean;
    procedure Repath
-     (Group : in out Crowd; Index : Positive; M : Map.City);
+     (Group : in out Crowd;
+      Index : Positive;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector);
    procedure Tick_One
-     (Group : in out Crowd; Index : Positive; M : Map.City);
+     (Group : in out Crowd;
+      Index : Positive;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector);
    function All_Arrived (Group : Crowd) return Boolean;
    procedure Append_Frames
      (Trace : in out Frame_Lists.Vector;
@@ -47,6 +54,19 @@ package body Megacorp.Peds is
          return Map.North_West;
       end if;
    end Facing_Of;
+
+   function Listed
+     (Blocked : Path.Block_Lists.Vector;
+      X, Y : Positive) return Boolean
+   is
+   begin
+      for I in Blocked.First_Index .. Blocked.Last_Index loop
+         if Blocked (I).X = X and then Blocked (I).Y = Y then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Listed;
 
    function Holds (P : Ped; X, Y : Positive) return Boolean is
    begin
@@ -88,30 +108,36 @@ package body Megacorp.Peds is
    end Blocker_Id;
 
    procedure Repath
-     (Group : in out Crowd; Index : Positive; M : Map.City)
+     (Group : in out Crowd;
+      Index : Positive;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector)
    is
-      Blocked : Path.Block_Lists.Vector;
-      Here    : constant Map.Point :=
+      Extra : Path.Block_Lists.Vector;
+      Here  : constant Map.Point :=
         (X => Group (Index).X, Y => Group (Index).Y);
-      Goal    : constant Map.Point :=
+      Goal  : constant Map.Point :=
         (X => Group (Index).Goal_X, Y => Group (Index).Goal_Y);
-      Route   : Path.Result;
-      Other   : Map.Point;
+      Route : Path.Result;
+      Other : Map.Point;
    begin
+      for I in Blocked.First_Index .. Blocked.Last_Index loop
+         Extra.Append (Blocked (I));
+      end loop;
       for I in Group'Range loop
          if I /= Index then
-            Blocked.Append
+            Extra.Append
               ((X => Group (I).X, Y => Group (I).Y));
             if Group (I).Along > 0
               and then Group (I).Cursor < Group (I).Route.Last_Index
             then
                Other := Group (I).Route (Group (I).Cursor + 1);
-               Blocked.Append (Other);
+               Extra.Append (Other);
             end if;
          end if;
       end loop;
       Route := Path.Find
-        (M, Here, Goal, Path.Walk, Path.Default_Budget, Blocked);
+        (M, Here, Goal, Path.Walk, Path.Default_Budget, Extra);
       if Path.Kind (Route) /= Path.Found then
          return;
       end if;
@@ -132,7 +158,10 @@ package body Megacorp.Peds is
    end Repath;
 
    procedure Tick_One
-     (Group : in out Crowd; Index : Positive; M : Map.City)
+     (Group : in out Crowd;
+      Index : Positive;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector)
    is
       Next : Map.Point;
       Who  : Natural;
@@ -140,6 +169,7 @@ package body Megacorp.Peds is
    begin
       if not Group (Index).Alive
         or else Group (Index).State = Arrived
+        or else Group (Index).State = Riding
       then
          return;
       end if;
@@ -151,15 +181,19 @@ package body Megacorp.Peds is
       Next := Group (Index).Route (Group (Index).Cursor + 1);
       Group (Index).Facing := Facing_Of
         ((X => Group (Index).X, Y => Group (Index).Y), Next);
-      if Taken (Group, Index, Next.X, Next.Y) then
+      if Taken (Group, Index, Next.X, Next.Y)
+        or else Listed (Blocked, Next.X, Next.Y)
+      then
          Group (Index).State := Standing;
          Group (Index).Wait := Group (Index).Wait + 1;
          Who := Blocker_Id (Group, Index, Next.X, Next.Y);
+         --  Who = 0 is a vehicle tile. Every ped id is higher, so
+         --  the ped repaths. A lower ped id still keeps its route
+         --  when the blocker is another ped.
          if Group (Index).Wait >= Wait_Limit
-           and then Who > 0
            and then Group (Index).Ident > Who
          then
-            Repath (Group, Index, M);
+            Repath (Group, Index, M, Blocked);
          end if;
          return;
       end if;
@@ -363,11 +397,64 @@ package body Megacorp.Peds is
       P.Route.Append ((X => P.X, Y => P.Y));
    end Halt;
 
+   procedure Mount
+     (P : in out Ped;
+      At_Point : Map.Point;
+      Dir : Map.Eight_Way;
+      Step : Natural)
+   is
+   begin
+      P.X := At_Point.X;
+      P.Y := At_Point.Y;
+      P.Goal_X := At_Point.X;
+      P.Goal_Y := At_Point.Y;
+      P.Along := Step;
+      P.Facing := Dir;
+      P.Wait := 0;
+      P.Cursor := 1;
+      P.State := Riding;
+      P.Route.Clear;
+      P.Route.Append (At_Point);
+   end Mount;
+
+   procedure Carry
+     (P : in out Ped;
+      At_Point : Map.Point;
+      Dir : Map.Eight_Way;
+      Step : Natural)
+   is
+   begin
+      P.X := At_Point.X;
+      P.Y := At_Point.Y;
+      P.Goal_X := At_Point.X;
+      P.Goal_Y := At_Point.Y;
+      P.Along := Step;
+      P.Facing := Dir;
+      P.Cursor := 1;
+      P.State := Riding;
+      P.Route.Clear;
+      P.Route.Append (At_Point);
+   end Carry;
+
+   procedure Relocate (P : in out Ped; At_Point : Map.Point) is
+   begin
+      P.X := At_Point.X;
+      P.Y := At_Point.Y;
+      Halt (P);
+   end Relocate;
+
+   function Claims (P : Ped; X, Y : Positive) return Boolean is
+   begin
+      return Holds (P, X, Y);
+   end Claims;
+
    procedure Command_Walk
      (Group : in out Crowd;
       Index : Positive;
       Goal : Map.Point;
       M : Map.City;
+      Blocked : Path.Block_Lists.Vector :=
+        Path.Block_Lists.Empty_Vector;
       Accepted : out Boolean)
    is
       Here  : constant Map.Point :=
@@ -386,7 +473,8 @@ package body Megacorp.Peds is
          Accepted := True;
          return;
       end if;
-      Route := Path.Find (M, Here, Goal, Path.Walk);
+      Route := Path.Find
+        (M, Here, Goal, Path.Walk, Path.Default_Budget, Blocked);
       if Path.Kind (Route) /= Path.Found then
          Accepted := False;
          return;
@@ -429,12 +517,17 @@ package body Megacorp.Peds is
       return True;
    end Distinct_Ids;
 
-   procedure Tick (Group : in out Crowd; M : Map.City) is
+   procedure Tick
+     (Group : in out Crowd;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector :=
+        Path.Block_Lists.Empty_Vector)
+   is
    begin
       for Wanted in Ped_Id loop
          for I in Group'Range loop
             if Group (I).Ident = Wanted then
-               Tick_One (Group, I, M);
+               Tick_One (Group, I, M, Blocked);
             end if;
          end loop;
       end loop;

@@ -3,8 +3,10 @@
 
 with Ada.Containers.Vectors;
 with Megacorp.Map;
+with Megacorp.Path;
 with Megacorp.Weapons;
 use type Ada.Containers.Count_Type;
+use type Megacorp.Map.Eight_Way;
 use type Megacorp.Map.Point;
 
 --  Item 6. One ped on a Megacorp.Path route, advanced by a fixed tick.
@@ -26,7 +28,7 @@ package Megacorp.Peds is
 
    subtype Ped_Id is Positive range 1 .. 8;
 
-   type State_Kind is (Standing, Walking, Arrived);
+   type State_Kind is (Standing, Walking, Arrived, Riding);
 
    type Ped is private;
 
@@ -96,13 +98,55 @@ package Megacorp.Peds is
      with Post =>
        State_Of (P) = Standing and then Along (P) = 0;
 
+   --  Snap onto a vehicle. Step is that vehicle's sub-tile count.
+   procedure Mount
+     (P : in out Ped;
+      At_Point : Map.Point;
+      Dir : Map.Eight_Way;
+      Step : Natural)
+     with Pre => Step < Steps_Per_Tile,
+       Post =>
+         State_Of (P) = Riding
+         and then Tile_X (P) = At_Point.X
+         and then Tile_Y (P) = At_Point.Y
+         and then Along (P) = Step
+         and then Facing (P) = Dir;
+
+   --  A rider follows the vehicle. The ped stays Riding.
+   procedure Carry
+     (P : in out Ped;
+      At_Point : Map.Point;
+      Dir : Map.Eight_Way;
+      Step : Natural)
+     with Pre =>
+       State_Of (P) = Riding and then Step < Steps_Per_Tile,
+       Post =>
+         State_Of (P) = Riding
+         and then Tile_X (P) = At_Point.X
+         and then Tile_Y (P) = At_Point.Y
+         and then Along (P) = Step
+         and then Facing (P) = Dir;
+
+   --  Put the ped on a tile, standing, with no route.
+   procedure Relocate (P : in out Ped; At_Point : Map.Point)
+     with Post =>
+       State_Of (P) = Standing
+       and then Tile_X (P) = At_Point.X
+       and then Tile_Y (P) = At_Point.Y
+       and then Along (P) = 0;
+
+   function Claims (P : Ped; X, Y : Positive) return Boolean;
+
    --  Replace the route with a walk to Goal. Accepted is false when
    --  no walk path exists; the ped is left where it stands.
+   --  Blocked tiles are extra walls for this search.
    procedure Command_Walk
      (Group : in out Crowd;
       Index : Positive;
       Goal : Map.Point;
       M : Map.City;
+      Blocked : Path.Block_Lists.Vector :=
+        Path.Block_Lists.Empty_Vector;
       Accepted : out Boolean)
      with Pre =>
        Index in Group'Range
@@ -120,7 +164,11 @@ package Megacorp.Peds is
 
    function Distinct_Ids (Group : Crowd) return Boolean;
 
-   procedure Tick (Group : in out Crowd; M : Map.City)
+   procedure Tick
+     (Group : in out Crowd;
+      M : Map.City;
+      Blocked : Path.Block_Lists.Vector :=
+        Path.Block_Lists.Empty_Vector)
      with Pre => Distinct_Ids (Group);
 
    type Frame is record

@@ -5,6 +5,7 @@ with Ada.Directories;
 with Ada.Text_IO;
 with Megacorp.Actions;
 with Megacorp.Shots;
+with Megacorp.Vehicles;
 with Megacorp.Weapons;
 with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
@@ -917,6 +918,16 @@ package body Megacorp.Map is
    function Fight_Of (M : City) return Duel_Points;
    function Firefight (M : City) return Act.Shot_Lists.Vector;
    procedure Write_Fight (File : Ada.Text_IO.File_Type; M : City);
+   procedure Write_Ride_Frame
+     (File : Ada.Text_IO.File_Type;
+      Frame : Act.Ride_Frame;
+      Last_Item : Boolean);
+   procedure Write_Vehicle
+     (File : Ada.Text_IO.File_Type;
+      Trace : Act.Ride_Lists.Vector;
+      Who : Positive;
+      Last_Item : Boolean);
+   procedure Write_Drive (File : Ada.Text_IO.File_Type; M : City);
 
    function Fight_Of (M : City) return Duel_Points is
       Start : constant Point := Locate (M, Pavement, False);
@@ -984,8 +995,115 @@ package body Megacorp.Map is
       Write_Script_Ped (File, Trace, 1, False);
       Write_Script_Ped (File, Trace, 2, True);
       Ada.Text_IO.Put_Line (File, "      ]");
-      Ada.Text_IO.Put_Line (File, "    }");
+      Ada.Text_IO.Put_Line (File, "    },");
    end Write_Fight;
+
+   procedure Write_Ride_Frame
+     (File : Ada.Text_IO.File_Type;
+      Frame : Act.Ride_Frame;
+      Last_Item : Boolean)
+   is
+   begin
+      Ada.Text_IO.Put (File, "          {""t"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Tick)));
+      Ada.Text_IO.Put (File, ",""x"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.X)));
+      Ada.Text_IO.Put (File, ",""y"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Y)));
+      Ada.Text_IO.Put (File, ",""along"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Along)));
+      Ada.Text_IO.Put (File, ",""facing"":""");
+      Ada.Text_IO.Put (File, Facing_Token (Frame.Facing));
+      Ada.Text_IO.Put (File, """,""state"":""");
+      Ada.Text_IO.Put
+        (File, Vehicles.State_Token (Frame.Motion));
+      Ada.Text_IO.Put (File, """,""health"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Health)));
+      Ada.Text_IO.Put (File, ",""max"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Cap)));
+      Ada.Text_IO.Put (File, ",""intact"":");
+      if Frame.Intact then
+         Ada.Text_IO.Put (File, "true");
+      else
+         Ada.Text_IO.Put (File, "false");
+      end if;
+      Ada.Text_IO.Put (File, ",""riders"":[");
+      for I in 1 .. Frame.Riders loop
+         if I > 1 then
+            Ada.Text_IO.Put (File, ",");
+         end if;
+         Ada.Text_IO.Put (File, Trim (Integer'Image (Frame.Rider (I))));
+      end loop;
+      Ada.Text_IO.Put (File, "]}");
+      if Last_Item then
+         Ada.Text_IO.New_Line (File);
+      else
+         Ada.Text_IO.Put_Line (File, ",");
+      end if;
+   end Write_Ride_Frame;
+
+   procedure Write_Vehicle
+     (File : Ada.Text_IO.File_Type;
+      Trace : Act.Ride_Lists.Vector;
+      Who : Positive;
+      Last_Item : Boolean)
+   is
+      Count : Natural := 0;
+      Seen  : Natural := 0;
+      Sort  : Vehicles.Kind := Vehicles.Car;
+   begin
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Integer (Trace (I).Ident) = Who then
+            Count := Count + 1;
+            Sort := Trace (I).Sort;
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "      {");
+      Ada.Text_IO.Put (File, "        ""id"": ");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Who)));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        ""kind"": """
+         & Vehicles.Kind_Token (Sort) & """,");
+      Ada.Text_IO.Put_Line (File, "        ""frames"": [");
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Integer (Trace (I).Ident) = Who then
+            Seen := Seen + 1;
+            Write_Ride_Frame (File, Trace (I), Seen = Count);
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "        ]");
+      if Last_Item then
+         Ada.Text_IO.Put_Line (File, "      }");
+      else
+         Ada.Text_IO.Put_Line (File, "      },");
+      end if;
+   end Write_Vehicle;
+
+   procedure Write_Drive (File : Ada.Text_IO.File_Type; M : City) is
+      Trace : constant Act.Outing :=
+        Act.Run_Vehicles (M, Layout_Seed (M));
+   begin
+      Ada.Text_IO.Put_Line (File, "    {");
+      Ada.Text_IO.Put_Line
+        (File, "      ""label"": ""Vehicles"",");
+      Ada.Text_IO.Put (File, "      ""steps_per_tile"": ");
+      Ada.Text_IO.Put
+        (File, Trim (Integer'Image (Peds.Steps_Per_Tile)));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put_Line (File, "      ""peds"": [");
+      Write_Script_Ped (File, Trace.Peds, 1, False);
+      Write_Script_Ped (File, Trace.Peds, 2, False);
+      Write_Script_Ped (File, Trace.Peds, 3, False);
+      Write_Script_Ped (File, Trace.Peds, 4, True);
+      Ada.Text_IO.Put_Line (File, "      ],");
+      Ada.Text_IO.Put_Line (File, "      ""vehicles"": [");
+      Write_Vehicle (File, Trace.Cars, 1, False);
+      Write_Vehicle (File, Trace.Cars, 2, True);
+      Ada.Text_IO.Put_Line (File, "      ]");
+      Ada.Text_IO.Put_Line (File, "    }");
+   end Write_Drive;
 
    procedure Write_Paths
      (File : Ada.Text_IO.File_Type; M : City)
@@ -1012,7 +1130,14 @@ package body Megacorp.Map is
          Plan.Follower_At, Plan.Item_At, False);
       Put_Route
         (File, M, "Firefight", Path.Walk,
-         Fight_Of (M).Shooter, Fight_Of (M).Target, True);
+         Fight_Of (M).Shooter, Fight_Of (M).Target, False);
+      declare
+         Plan : constant Act.Road_Plan := Act.Vehicle_Demo (M);
+      begin
+         Put_Route
+           (File, M, "Vehicles", Path.Drive,
+            Plan.Car_At, Plan.Goal, True);
+      end;
       Ada.Text_IO.Put_Line (File, "  ]");
    end Write_Paths;
 
@@ -1047,6 +1172,8 @@ package body Megacorp.Map is
             return "walking";
          when Peds.Arrived =>
             return "arrived";
+         when Peds.Riding =>
+            return "riding";
       end case;
    end State_Token;
 
@@ -1142,6 +1269,7 @@ package body Megacorp.Map is
          Ada.Text_IO.Put_Line (File, "    },");
          Write_Script (File, M);
          Write_Fight (File, M);
+         Write_Drive (File, M);
          Ada.Text_IO.Put_Line (File, "  ]");
       end;
    end Write_Motion;
