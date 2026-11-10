@@ -26,7 +26,9 @@ package Megacorp.Peds is
    Wait_Limit     : constant := 3;
    Full_Health    : constant := 100;
 
-   subtype Ped_Id is Positive range 1 .. 8;
+   --  256 is the cap chosen in 0.15.0. A city crowd is much smaller.
+   --  Tick order walks the crowd, not every id in this range.
+   subtype Ped_Id is Positive range 1 .. 256;
 
    type State_Kind is (Standing, Walking, Arrived, Riding);
 

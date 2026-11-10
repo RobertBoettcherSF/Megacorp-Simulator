@@ -9,6 +9,6 @@ package body Megacorp is
 
    function Version return String is
    begin
-      return "0.14.0";
+      return "0.15.0";
    end Version;
 end Megacorp;

@@ -581,7 +581,84 @@ function nearestPrepared(x, y) {
   return best;
 }
 
+let worldData = null;
+let showWorld = false;
+
+function regionPoint(region, width, height) {
+  let maxX = 1;
+  let maxY = 1;
+  worldData.regions.forEach((item) => {
+    maxX = Math.max(maxX, item.x);
+    maxY = Math.max(maxY, item.y);
+  });
+  const pad = 28;
+  return {
+    x: pad + (region.x / maxX) * (width - pad * 2),
+    y: pad + (region.y / maxY) * (height - pad * 2)
+  };
+}
+
+function nearestRegion(x, y, width, height) {
+  let best = worldData.regions[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  worldData.regions.forEach((region) => {
+    const at = regionPoint(region, width, height);
+    const distance = (at.x - x) ** 2 + (at.y - y) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = region;
+    }
+  });
+  return best;
+}
+
+function drawWorld() {
+  const canvas = document.getElementById("map");
+  const ctx = canvas.getContext("2d");
+  canvas.width = 900;
+  canvas.height = 560;
+  const image = ctx.createImageData(canvas.width, canvas.height);
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const region = nearestRegion(x, y, canvas.width, canvas.height);
+      const owner = worldData.corporations.find((corp) => corp.id === region.owner);
+      const match = (owner && owner.colour.match(/#(..)(..)(..)/))
+        || ["", "33", "33", "33"];
+      const pixel = (y * canvas.width + x) * 4;
+      image.data[pixel] = parseInt(match[1], 16);
+      image.data[pixel + 1] = parseInt(match[2], 16);
+      image.data[pixel + 2] = parseInt(match[3], 16);
+      image.data[pixel + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  ctx.strokeStyle = "rgba(12, 12, 16, 0.45)";
+  ctx.lineWidth = 1;
+  worldData.links.forEach((link) => {
+    const from = regionPoint(
+      worldData.regions[link.a - 1], canvas.width, canvas.height);
+    const to = regionPoint(
+      worldData.regions[link.b - 1], canvas.width, canvas.height);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  });
+  ctx.fillStyle = "#111216";
+  worldData.regions.forEach((region) => {
+    const at = regionPoint(region, canvas.width, canvas.height);
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  document.getElementById("zoom-label").textContent = "world";
+}
+
 function draw() {
+  if (showWorld && worldData) {
+    drawWorld();
+    return;
+  }
   if (!mapData) {
     return;
   }
@@ -836,6 +913,13 @@ async function main() {
   });
   const canvas = document.getElementById("map");
   canvas.addEventListener("mousemove", (event) => {
+    if (showWorld && worldData) {
+      const point = canvasPoint(event);
+      const region = nearestRegion(
+        point.x, point.y, canvas.width, canvas.height);
+      document.getElementById("hover").textContent = region.name;
+      return;
+    }
     if (!mapData) {
       return;
     }
@@ -855,7 +939,43 @@ async function main() {
   canvas.addEventListener("mouseleave", () => {
     document.getElementById("hover").textContent = "Hover a tile.";
   });
+  document.getElementById("world").addEventListener("click", () => {
+    showWorld = !showWorld;
+    document.getElementById("world").textContent =
+      showWorld ? "City" : "World map";
+    if (showWorld && worldData) {
+      document.getElementById("seed-label").textContent =
+        `world ${worldData.seed}`;
+      document.getElementById("path-status").textContent =
+        "Click a region to read it and open its city.";
+      document.getElementById("hover").textContent = "Hover a region.";
+      draw();
+      return;
+    }
+    showWorld = false;
+    draw();
+  });
   canvas.addEventListener("click", (event) => {
+    if (showWorld && worldData) {
+      const point = canvasPoint(event);
+      const region = nearestRegion(point.x, point.y, canvas.width, canvas.height);
+      const owner = worldData.corporations.find((corp) => corp.id === region.owner);
+      document.getElementById("path-status").textContent =
+        `${region.name}: ${owner ? owner.name : "unclaimed"}`
+        + ` · pop ${region.population}k · tech ${region.tech}`
+        + ` · tax ${region.tax} · unrest ${region.unrest}`
+        + ` · city seed ${region.city_seed}`;
+      showWorld = false;
+      document.getElementById("world").textContent = "World map";
+      const summary = `${region.name}: ${owner ? owner.name : "unclaimed"}`
+        + ` · pop ${region.population}k · tech ${region.tech}`
+        + ` · tax ${region.tax} · unrest ${region.unrest}`
+        + ` · city seed ${region.city_seed}`;
+      loadFile(region.city).then(() => {
+        document.getElementById("path-status").textContent = summary;
+      }).catch(showError);
+      return;
+    }
     if (!mapData || !mapData.paths) {
       return;
     }
@@ -872,6 +992,14 @@ async function main() {
     refreshStatus();
     draw();
   });
+  try {
+    const worldResponse = await fetch("data/world.json");
+    if (worldResponse.ok) {
+      worldData = await worldResponse.json();
+    }
+  } catch (err) {
+    worldData = null;
+  }
   await loadFile(index.maps[select.selectedIndex].file);
 }
 

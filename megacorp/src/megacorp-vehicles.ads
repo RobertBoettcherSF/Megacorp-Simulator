@@ -13,7 +13,9 @@ use type Megacorp.Map.Point;
 --  next tile once a crossing has started. An intact vehicle blocks
 --  walking. A wreck blocks driving and does not block walking.
 package Megacorp.Vehicles is
-   subtype Vehicle_Id is Positive range 1 .. 4;
+   --  64 is the cap chosen in 0.15.0. A city fleet is much smaller.
+   --  The drive tick walks the fleet, not every id in this range.
+   subtype Vehicle_Id is Positive range 1 .. 64;
 
    type Kind is (Car, Van);
 

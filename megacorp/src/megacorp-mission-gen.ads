@@ -1,6 +1,7 @@
 --  SPDX-License-Identifier: MIT
 --  Copyright (c) 2026 Robert Boettcher
 
+with Megacorp.Behaviour;
 with Megacorp.Map;
 with Megacorp.Map.Gen;
 with Megacorp.RNG;
@@ -13,10 +14,38 @@ package Megacorp.Mission.Gen is
 
    type Opposition is (Light, Firm, Heavy);
 
+   --  Caps chosen in 0.15.0. The ped id type allows 256 and the
+   --  vehicle id type allows 64. A 128x128 crowd stays under these.
+   Max_People : constant := 96;
+   Max_Motors : constant := 16;
+
+   type Duty is
+     (Lead, Ally, Contact, Sentry, Post, Citizen, Driver, Officer);
+
+   type Seat is record
+      Spot  : Map.Point := (X => 1, Y => 1);
+      Job   : Behaviour.Role := Behaviour.Civilian;
+      Work  : Duty := Citizen;
+      Aim   : Map.Point := (X => 1, Y => 1);
+      Motor : Positive := 1;
+   end record;
+
+   type Seat_List is array (1 .. Max_People) of Seat;
+
+   type Motor is record
+      Spot  : Map.Point := (X => 1, Y => 1);
+      Aim   : Map.Point := (X => 1, Y => 1);
+      Moves : Boolean := False;
+      Van   : Boolean := False;
+   end record;
+
+   type Motor_List is array (1 .. Max_Motors) of Motor;
+
    type Scene is record
       Kind      : Recipe_Kind := Briefing;
       Level     : Opposition := Light;
       Cap       : Natural := 100;
+      Squad     : Natural := 1;
       Contact   : Map.Point := (X => 1, Y => 1);
       Agent     : Map.Point := (X => 1, Y => 1);
       Case_At   : Map.Point := (X => 1, Y => 1);
@@ -35,6 +64,10 @@ package Megacorp.Mission.Gen is
       Car       : Map.Point := (X => 1, Y => 1);
       Car_Goal  : Map.Point := (X => 1, Y => 1);
       Cache     : Map.Point := (X => 1, Y => 1);
+      People    : Natural := 0;
+      Seat      : Seat_List;
+      Motors    : Natural := 0;
+      Motor     : Motor_List;
    end record;
 
    function Build (M : Map.City; Seed : RNG.Word) return Scene

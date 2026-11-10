@@ -524,13 +524,27 @@ package body Megacorp.Peds is
         Path.Block_Lists.Empty_Vector)
    is
    begin
-      for Wanted in Ped_Id loop
+      declare
+         type Rank is array (Positive range <>) of Positive;
+         Order : Rank (Group'Range);
+         Swap  : Positive;
+      begin
          for I in Group'Range loop
-            if Group (I).Ident = Wanted then
-               Tick_One (Group, I, M, Blocked);
-            end if;
+            Order (I) := I;
          end loop;
-      end loop;
+         for I in Group'Range loop
+            for J in I + 1 .. Group'Last loop
+               if Group (Order (J)).Ident < Group (Order (I)).Ident then
+                  Swap := Order (I);
+                  Order (I) := Order (J);
+                  Order (J) := Swap;
+               end if;
+            end loop;
+         end loop;
+         for I in Group'Range loop
+            Tick_One (Group, Order (I), M, Blocked);
+         end loop;
+      end;
    end Tick;
 
    function Run

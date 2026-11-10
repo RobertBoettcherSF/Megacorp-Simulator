@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.15.0, item 15
+
+Ped ids now run to 256 and vehicle ids to 64. The tick walks the people who are actually present, in id order, so the cap does not multiply the cost. A default city holds about 55 people: civilians in the residential blocks, the slums, the industrial strip, and the corporate core, guards at corporate doors, four police beats, and a squad of one to four agents. Eight vehicles are on the roads. Seeds 1 through 50 still all win. The split is 19 briefings, 18 snatches, and 13 contracts, and each of those wins.
+
+`Megacorp.World.Gen` builds the campaign from the World and Region streams. Forty regions get generated names, population, tech, tax, unrest, a grid position, and a city seed. The roads of the grid keep the map connected, with a few extra links. Four corporations get generated names, distinct colours, distinct home regions, cash, and a trait. The first corporation keeps only its home. The others divide the remaining regions by which home is nearest. `bin/megacorp --world` prints it. The page draws the ownership map and opens a region's city.
+
 ### 2026-11-10 — version 0.14.0, item 14
 
 `Megacorp.Mission.Gen` fills a generated city and gives it a mission recipe. The Block stream picks the stage. The Mission stream picks the recipe. Civilians, corporate guards, a police pair, parked cars, one car that drives, a case, and a cache come from that placement. The recipe is the objective set, the tiles those objectives use, an opposition level, and a tick cap. `bin/megacorp --mission SEED` runs it. Seeds 1, 42, and 100 export a Generated trace beside the older demos. The street fixture stays for the checks that name it.
@@ -212,6 +218,16 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Page.** Seeds 1, 42, and 100 gain a Generated trace: the eight people, the objectives, the two parked vehicles, and the car the slum civilian drives. The older Mission trace stays.
 
+### Item 15 — world, and a denser street
+
+**Caps.** `Peds.Ped_Id` is 1..256. `Vehicles.Vehicle_Id` is 1..64. The old loops walked every id in the type, which would have made a tick 32 times slower with an empty upper range. `Peds.Tick`, `Behaviour.React`, and the vehicle advance now sort the people or vehicles that are present and visit them in id order. That is the same order as the old scan. A sweep of seeds 1 through 50, each a full generated mission of about 55 people and 8 vehicles, took 9.7 seconds when each seed was a separate process, about 190 milliseconds a mission. In one process the smoke test is the same work without the process start. The alternative was a cap of 64 peds. 256 leaves room for a later crowd without another type change.
+
+**Density.** Counts are a rate per 1024 tiles of that district, clamped. On the default 128×128 map that is about 12 to 28 residential civilians, 4 to 16 in the slums, 4 to 14 industrial civilians, and 1 to 10 corporate civilians, plus 3 to 10 guards, exactly 4 police, 6 parked vehicles, and 2 moving vehicles. The squad is a roll from 1 to 4. Allies stand off the road the leader uses and wait. Other civilians wait out the mission, because a hundred-tick wait is the longest single wait and a second wait covers the 200-tick cap. Letting them wander would let one of fifty people step onto the only road tile of the stage. Seeds 1 through 50 still all win: 19 of 19 briefings, 18 of 18 snatches, 13 of 13 contracts.
+
+**World.** One World child stream places the corporations, the home shuffle, the colours, and the extra roads. Each region has its own Region child for its name, population (80 to 900, in thousands), tech (15 to 85), tax (5 to 35), unrest (0 to 55), and a small position jitter. The city seed is `Derive` of the world seed and that region's domain key, so naming the region does not move the city. Names are two or three syllables from a 24-syllable list, plus a corporation suffix (Combine, Works, Holdings, Foundry, Compact, Cartel). No real brand is used. Homes are a partial shuffle, so they differ. Corporation 1 keeps only its home. The other regions go to the nearest other home. Grid neighbours to the right and down make the graph connected; a one-in-four chance adds a diagonal. Colours are eight fixed inks shuffled, so four corporations never share a colour. Happiness from the design notes is not a separate field: unrest is the stored measure.
+
+**Page.** `world.json` is seed 42. Each region also has `region-N.json`, the terrain only, so the page can open the city without the mission trace. The World map button draws a nearest-region colouring. A click prints the region's stats and loads that file.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -222,7 +238,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11, 13, and 14 (version 0.14.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–15 (version 0.15.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -595,7 +611,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 13. **City-block generator.** Done in 0.13.0. From the city seed and the city-map size (default 128×128): ground, a road grid with varied block sizes, districts, building heights, doors, parks, a river with bridges, and sidewalks that pathfinding accepts. `Test_Layout` remains for its unit checks. Depends on: 3, 2, 4, 5. Try: the smoke test, `bin/megacorp` for a text sample of seed 42, and the browser page for seeds 1, 42, and 100. Size: new work, medium-large.
 14. **Block population and mission recipes.** Done in 0.14.0. From the Block and Mission streams: civilians, corporate guards, police beats, parked and moving vehicles, items, and a recipe of objectives, placement, opposition, and a tick cap. `bin/megacorp --mission SEED` plays it. Depends on: 13, 11. Try: the smoke test, `bin/megacorp --mission 42`, and the browser page's Generated trace for seeds 1, 42, and 100. Size: medium.
-15. **World and city generator.** Regions (default about 40), neighbours, cities, initial territory, population/tax baselines, corporations (default 4). Depends on: 2, 13. Try: print a world map and corp owners for seed 42; regenerate and match. Size: medium.
+15. **World and city generator.** Done in 0.15.0. From the World and Region streams: about 40 named regions, adjacency, a city seed each, and 4 corporations with names, colours, homes, cash, and a trait. The ped cap is 256 and the vehicle cap is 64, with a denser street. Depends on: 2, 13. Try: `bin/megacorp --world 42`, the smoke test, and the browser page's World map. Size: medium.
 16. **Corporation AI hook.** Between missions, seeded territory/research pressure (the idea of `simulate_enemy_moves`, not a port of that routine). Depends on: 15. Try: after a simulated “week”, ownership changes are stable for that seed. Size: small-medium.
 
 ### Phase D — Persistence
