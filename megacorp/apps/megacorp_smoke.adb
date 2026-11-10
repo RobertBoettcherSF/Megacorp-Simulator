@@ -3,6 +3,8 @@
 
 with Ada.Assertions;
 with Ada.Command_Line;
+with Ada.Directories;
+with Ada.Exceptions;
 with Ada.Text_IO;
 with Ada.Containers;
 with Ada.Strings.Fixed;
@@ -23,6 +25,7 @@ with Megacorp.Path;
 with Megacorp.Peds;
 with Megacorp.Parameters;
 with Megacorp.RNG;
+with Megacorp.Save;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -47,9 +50,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.16.0"
+     (Megacorp.Version = "0.17.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.16.0");
+      "version 0.17.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -545,6 +548,133 @@ begin
          and then Owners (Once)
          and then Steady,
          "empty corporations are eliminated");
+   end;
+
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Camp renames Megacorp.World.Campaign;
+      package Globe renames Megacorp.World.Gen;
+
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean;
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean
+      is
+      begin
+         for C in 1 .. Left.Corps loop
+            if Left.Company (C).Cash /= Right.Company (C).Cash
+              or else Left.Company (C).Eliminated
+                /= Right.Company (C).Eliminated
+            then
+               return False;
+            end if;
+         end loop;
+         for I in 1 .. Left.Regions loop
+            if Left.Area (I).Owner /= Right.Area (I).Owner
+              or else Left.Area (I).Tax /= Right.Area (I).Tax
+              or else Left.Area (I).Unrest /= Right.Area (I).Unrest
+              or else Left.Area (I).Defence /= Right.Area (I).Defence
+              or else Left.Area (I).Tech /= Right.Area (I).Tech
+            then
+               return False;
+            end if;
+         end loop;
+         return True;
+      end Match;
+
+      function Failed (Name, Expect : String) return Boolean;
+      function Failed (Name, Expect : String) return Boolean is
+         Root : constant Native.Disk :=
+           Native.Open ("/tmp/megacorp-save");
+      begin
+         declare
+            Back : constant Megacorp.Save.Snapshot :=
+              Megacorp.Save.Load (Root, Name);
+            pragma Unreferenced (Back);
+         begin
+            return False;
+         end;
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            return Ada.Exceptions.Exception_Message (Error) = Expect;
+      end Failed;
+
+      Opened : constant Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Played : Megacorp.World.Atlas := Opened;
+      Fresh : Megacorp.World.Atlas := Opened;
+      Whole : Megacorp.World.Atlas := Opened;
+      Snap : Megacorp.Save.Snapshot;
+      Back : Megacorp.Save.Snapshot;
+   begin
+      Camp.Run (Played, 5);
+      Snap := Megacorp.Save.Capture
+        (Played, 5, Params.Auto_Play);
+      Snap.Agent (1).Health := 80;
+      declare
+         City : Megacorp.Map.City :=
+           Megacorp.Map.Gen.Generate (Opened.Area (1).City, Defaults);
+         Cell : Megacorp.Map.Tile :=
+           Megacorp.Map.Tile_At (City, 2, 2);
+      begin
+         Cell.Kind := Megacorp.Map.Open_Ground;
+         Cell.Level := 0;
+         Cell.Walkable := True;
+         Cell.Drivable := False;
+         Megacorp.Save.Damage (Snap, 1, 2, 2, Cell);
+         Megacorp.Save.Apply_Patches (Snap, 1, City);
+         Smoke_Check.Expect
+           (Megacorp.Map.Tile_At (City, 2, 2).Kind
+              = Megacorp.Map.Open_Ground
+            and then Snap.Area (1).Visited
+            and then Megacorp.Save.Bytes (Snap) <= Megacorp.Save.Budget,
+            "a ruined tile is a patch under the budget");
+      end;
+      Ada.Directories.Create_Path ("/tmp/megacorp-save");
+      declare
+         Root : Native.Disk := Native.Open ("/tmp/megacorp-save");
+      begin
+         Megacorp.Save.Store (Root, "slot.mgc", Snap);
+         Back := Megacorp.Save.Load (Root, "slot.mgc");
+      end;
+      Smoke_Check.Expect
+        (Megacorp.Save.Same (Snap, Back),
+         "save round trip");
+      declare
+         Root : Native.Disk := Native.Open ("/tmp/megacorp-save");
+         Raw : constant String := Native.Read (Root, "slot.mgc");
+         Mark : Natural := Raw'First;
+         Bad : String := Raw;
+         Next : String := Raw;
+      begin
+         while Mark < Raw'Last
+           and then Raw (Mark .. Mark + 1) /= "r "
+         loop
+            Mark := Mark + 1;
+         end loop;
+         if Bad (Mark + 2) = '1' then
+            Bad (Mark + 2) := '2';
+         else
+            Bad (Mark + 2) := '1';
+         end if;
+         Native.Write (Root, "bad.mgc", Bad);
+         Mark := Raw'First;
+         while Mark <= Raw'Last and then Raw (Mark) /= ' ' loop
+            Mark := Mark + 1;
+         end loop;
+         Next (Mark + 1) := '2';
+         Native.Write (Root, "next.mgc", Next);
+      end;
+      Smoke_Check.Expect
+        (Failed ("bad.mgc", "checksum mismatch")
+         and then Failed ("next.mgc", "wrong format version"),
+         "bad saves are rejected");
+      Megacorp.Save.Restore (Back, Fresh);
+      Camp.Run (Fresh, 5);
+      Camp.Run (Whole, 10);
+      Smoke_Check.Expect
+        (Match (Fresh, Whole),
+         "load then continue matches one play");
    end;
 
    declare
