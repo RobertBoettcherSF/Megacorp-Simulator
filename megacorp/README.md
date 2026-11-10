@@ -1,8 +1,8 @@
-# Megacorp Simulator 0.11.0
+# Megacorp Simulator 0.13.0
 
-Headless Ada core for Megacorp Simulator. Version 0.11.0 adds
-the mission loop: objectives, a script, and win, loss, or timeout
-(design items 1–11). Item 12, the C++ comparison, is skipped.
+Headless Ada core for Megacorp Simulator. Version 0.13.0 adds
+the city-block generator (design item 13). Item 12, the C++
+comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -46,7 +46,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.11.0.zip` for
+It also writes `dist/megacorp_v0.13.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -81,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.11.0 contains
+## What 0.13.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -91,9 +91,13 @@ The RNG is xoshiro256\*\* seeded by SplitMix64. Child streams come
 from the parent seed and a key (world, region, city, block, mission).
 
 The map is one city. Each tile stores terrain, height, and walkable
-and drivable flags. `Test_Layout` fills a road grid, pavement,
-building blocks, and a river from the city-1 child of the given seed.
-That layout is a stand-in until the city-block generator.
+and drivable flags. `Megacorp.Map.Gen.Generate` fills that city from
+the city-1 child of the given seed: a road grid with a border, blocks
+of different sizes, four districts, parks, a river with bridges, and
+one lake kept off the roads. Sidewalks are the walkable cells beside
+a road, and one door niche opens the south face of a built block.
+`Test_Layout` is still there. The older unit checks call it. The
+export, the sample, and `--mission` call `Generate`.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads

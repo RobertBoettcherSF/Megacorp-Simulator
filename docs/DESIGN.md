@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.13.0, item 13
+
+`Megacorp.Map.Gen` builds a 128×128 city from the city-1 child of the world seed. The road grid includes the border and interior lines with gaps of 7 to 13 tiles, so the blocks are not one size. Four districts share the map: a corporate core, a residential field, an industrial strip, and a slum strip on the opposite side. Building height follows the district of that tile. Some blocks stay open as parks. A river crosses the city and the roads that meet it are bridges. One lake sits off the roads. Sidewalks are the open cells beside a road, and a built block keeps one pavement niche on its south face.
+
+`bin/megacorp`, `bin/megacorp --export`, and `bin/megacorp --mission` use this city. `Test_Layout` stays for the unit checks that name it. Seeds 1, 42, and 100 are exported from the generator. There is no 0.12.0: item 12 was skipped, and the version stays equal to the item number.
+
 ### 2026-11-10 — version 0.11.0, item 11
 
 `Megacorp.Mission` runs one mission. It is given the map, the cast, the vehicles, the items, the objectives, and a script of timed orders. It ticks until every objective is met, the squad is dead, or the tick cap is reached. The objectives are eliminate a ped, acquire an item, persuade a civilian, and evacuate onto a tile. A lost squad is checked before a win, so a mission cannot be won with nobody left. `bin/megacorp --mission SEED [--ticks N]` prints the result. The page gains a Mission trace: persuade, pick up the case, shoot the guard, and the firing tile is the evacuation zone.
@@ -166,6 +172,26 @@ This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 202
 
 Robert's standing rule for this night is to skip the C++ comparison. No harness, no shared fixture, no diff report. The Ada mission is checked by the smoke tests and the exported trace. The alternative was a small dump of positions against a built FreeSynd binary. It was not built.
 
+### Item 13 — city-block generator
+
+**Stream.** `Generate` draws on `RNG.Child (Make (Seed), City, 1)`, the same child `Test_Layout` used. The district frame is the first draws on that stream, so `District_At` can name a tile's district without storing a second grid. The alternative was a district id on the tile. It was left out because the JSON cell is five characters and the page already parses that.
+
+**Districts.** Corporate is a square at a centre picked in the middle third of the map. On the default 128×128 map the half-extent is 21, so the core is 43×43 (1,849 tiles, 11 percent). Industrial is a strip on one side, thickness edge/5 (25 tiles, about 19 percent). Slums are the opposite side, thickness edge/6 (21 tiles, 16 percent). Everything else is residential (about 53 percent). Corporate wins where the core overlaps a strip. The alternative was a noise field. A strip is easier to see on the isometric view and the shares stay inside a fixed band. Smoke accepts corporate 8–16, industrial 12–25, slums 12–22, residential 45–65. Measured on seeds 1, 42, and 100 the shares were 11, 19, 16, and 52–53.
+
+**Heights.** Corporate 9–14, residential 3–6, industrial 2–4, slums 1–3. Each building tile rolls inside the band of its own district, so a block that straddles a boundary changes height at the boundary. One roll for the whole block was the alternative. It would have put a slum-height tower in the core when the block centre sat just outside it.
+
+**Roads.** The border is a ring road, and interior lines run the full width or height. The gap between lines is picked from 7 to 13, so block sizes vary, and a full span cannot leave a disconnected street. A maze of short segments was the alternative. It can fail to connect, and the demos need a long clear street.
+
+**Water.** The river meanders with thickness 2 or 3, then the roads are painted over it, which is the bridge. The lake is a Manhattan disk of radius 3 to 5 and it does not paint a road tile. Painting the lake through the roads was the alternative. It would have cut the drive graph.
+
+**Sidewalks and doors.** An open cell orthogonally next to a road becomes pavement. A block whose centre is residential becomes a park with chance 1/4; any other block, 1/10. A built block turns one south-facade cell into pavement when the cell south of it is already walkable, so the niche joins the sidewalk. A door on every face was the alternative. One niche is enough for a person to stand at the building, and the interior stays blocked.
+
+**Reachable.** `Roads_Connected` is a 4-connected flood of every drivable tile. `Foot_Connected` is the same flood of every walkable tile. Every block sits between two of those full-span roads, and its sidewalk touches them, so a connected walkable set means every block can be walked to. Searching a path from every tile was the alternative. The flood answers the same question once.
+
+**Demos.** Column 1 is part of the ring, so the behaviour street and the mission fixture keep the coordinates they already had. Both still finish on seeds 1, 42, and 100, and the fixture still wins at tick 83. Searching for a fresh vertical run was the fallback if that column had been a building. It was not needed.
+
+**What stays on Test_Layout.** The 5×5 bounds check and the 24×24 layout equality checks still call `Test_Layout`. The export, the text sample, `--mission`, and the seeded demos call `Generate`.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -176,7 +202,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 (version 0.11.0) are implemented under `megacorp/`. Item 12 is skipped. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13 (version 0.13.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -547,7 +573,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 ### Phase C — Procedural generation
 
-13. **City-block generator.** From a block seed and the city-map size parameter (default 128×128): ground, road grid, building footprints and heights, doors, walkable surfaces that pathfinding accepts. Depends on: 3, 2, 4, 5. Try: dump ASCII or PNG of several seeds; pathfinding still finds routes. Size: new work, medium-large.
+13. **City-block generator.** Done in 0.13.0. From the city seed and the city-map size (default 128×128): ground, a road grid with varied block sizes, districts, building heights, doors, parks, a river with bridges, and sidewalks that pathfinding accepts. `Test_Layout` remains for its unit checks. Depends on: 3, 2, 4, 5. Try: the smoke test, `bin/megacorp` for a text sample of seed 42, and the browser page for seeds 1, 42, and 100. Size: new work, medium-large.
 14. **Block population and mission recipes.** Peds, vehicles, items, corp guards, a generated objective. Depends on: 13, 11. Try: `generate --seed=42 --mission` then auto-tick a smoke script (e.g. walk toward the target). Size: medium.
 15. **World and city generator.** Regions (default about 40), neighbours, cities, initial territory, population/tax baselines, corporations (default 4). Depends on: 2, 13. Try: print a world map and corp owners for seed 42; regenerate and match. Size: medium.
 16. **Corporation AI hook.** Between missions, seeded territory/research pressure (the idea of `simulate_enemy_moves`, not a port of that routine). Depends on: 15. Try: after a simulated “week”, ownership changes are stable for that seed. Size: small-medium.

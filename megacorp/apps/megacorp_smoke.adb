@@ -15,6 +15,7 @@ with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
 with Megacorp.Host;
 with Megacorp.Map;
+with Megacorp.Map.Gen;
 with Megacorp.Path;
 with Megacorp.Peds;
 with Megacorp.Parameters;
@@ -43,9 +44,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.11.0"
+     (Megacorp.Version = "0.13.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.11.0");
+      "version 0.13.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -305,6 +306,103 @@ begin
          and then Full.Height = 128
          and then Map.Layout_Seed (Full) = 42,
          "test layout follows the seed");
+   end;
+
+   declare
+      package Map renames Megacorp.Map;
+      package Gen renames Megacorp.Map.Gen;
+
+      Seed_A : constant Map.City := Gen.Generate (1, Defaults);
+      Seed_B : constant Map.City := Gen.Generate (42, Defaults);
+      Again  : constant Map.City := Gen.Generate (42, Defaults);
+      Seed_C : constant Map.City := Gen.Generate (100, Defaults);
+
+      function Shares_Ok (M : Map.City) return Boolean;
+      function Heights_Ok (M : Map.City) return Boolean;
+
+      function Shares_Ok (M : Map.City) return Boolean is
+         type Counts is array (Gen.District) of Natural;
+         Tally : Counts := (others => 0);
+         Total : constant Natural := M.Width * M.Height;
+         Zone  : Gen.District;
+
+         function Pct (Which : Gen.District) return Natural;
+         function Pct (Which : Gen.District) return Natural is
+         begin
+            return (Tally (Which) * 100) / Total;
+         end Pct;
+      begin
+         for Y in 1 .. M.Height loop
+            for X in 1 .. M.Width loop
+               Zone := Gen.District_At
+                 (Map.Layout_Seed (M), M.Width, M.Height, X, Y);
+               Tally (Zone) := Tally (Zone) + 1;
+            end loop;
+         end loop;
+         return Pct (Gen.Corporate) in 8 .. 16
+           and then Pct (Gen.Industrial) in 12 .. 25
+           and then Pct (Gen.Slums) in 12 .. 22
+           and then Pct (Gen.Residential) in 45 .. 65;
+      end Shares_Ok;
+
+      function Heights_Ok (M : Map.City) return Boolean is
+         type Seen is array (Gen.District) of Boolean;
+         Found : Seen := (others => False);
+         Cell  : Map.Tile;
+         Zone  : Gen.District;
+         Ok    : Boolean := True;
+      begin
+         for Y in 1 .. M.Height loop
+            for X in 1 .. M.Width loop
+               Cell := Map.Tile_At (M, X, Y);
+               if Cell.Kind = Map.Building then
+                  Zone := Gen.District_At
+                    (Map.Layout_Seed (M), M.Width, M.Height, X, Y);
+                  Ok := Ok
+                    and then Cell.Level >= Gen.Min_Storey (Zone)
+                    and then Cell.Level <= Gen.Max_Storey (Zone);
+                  Found (Zone) := True;
+               end if;
+            end loop;
+         end loop;
+         return Ok
+           and then Found (Gen.Corporate)
+           and then Found (Gen.Residential)
+           and then Found (Gen.Industrial)
+           and then Found (Gen.Slums);
+      end Heights_Ok;
+
+      Drive : constant Megacorp.Path.Result :=
+        Megacorp.Path.Find
+          (Seed_B,
+           (X => 1, Y => 1),
+           (X => Seed_B.Width, Y => Seed_B.Height),
+           Megacorp.Path.Drive);
+   begin
+      Smoke_Check.Expect
+        (Gen.Roads_Connected (Seed_A)
+         and then Gen.Roads_Connected (Seed_B)
+         and then Gen.Roads_Connected (Seed_C)
+         and then Gen.Foot_Connected (Seed_A)
+         and then Gen.Foot_Connected (Seed_B)
+         and then Gen.Foot_Connected (Seed_C)
+         and then Megacorp.Path.Kind (Drive) = Megacorp.Path.Found,
+         "generated roads and sidewalks connect");
+      Smoke_Check.Expect
+        (Seed_B = Again
+         and then Seed_A /= Seed_B
+         and then Seed_B /= Seed_C
+         and then Map.Layout_Seed (Seed_A) = 1
+         and then Map.Layout_Seed (Seed_C) = 100,
+         "generated city follows the seed");
+      Smoke_Check.Expect
+        (Shares_Ok (Seed_A)
+         and then Shares_Ok (Seed_B)
+         and then Shares_Ok (Seed_C)
+         and then Heights_Ok (Seed_A)
+         and then Heights_Ok (Seed_B)
+         and then Heights_Ok (Seed_C),
+         "districts and storeys stay in bounds");
    end;
 
    declare
@@ -1075,7 +1173,7 @@ begin
       for Seed of Map.Export_Seeds loop
          declare
             Layout : constant Map.City :=
-              Map.Test_Layout (Seed, Defaults);
+              Map.Gen.Generate (Seed, Defaults);
             One : constant Act.Outing :=
               Act.Run_Vehicles (Layout, Seed);
             Two : constant Act.Outing :=
@@ -1275,7 +1373,7 @@ begin
       for Seed of Map.Export_Seeds loop
          declare
             Layout : constant Map.City :=
-              Map.Test_Layout (Seed, Defaults);
+              Map.Gen.Generate (Seed, Defaults);
             First : constant Beh.Frame_Lists.Vector :=
               Beh.Run_Street (Layout, Seed);
             Second : constant Beh.Frame_Lists.Vector :=
@@ -1417,7 +1515,7 @@ begin
 
       declare
          City : constant Map.City :=
-           Map.Test_Layout (42, Defaults);
+           Map.Gen.Generate (42, Defaults);
          Shown : constant Job.Trace :=
            Job.Demonstration (City, 42, 200);
       begin

@@ -5,6 +5,7 @@ with Ada.Directories;
 with Ada.Text_IO;
 with Megacorp.Actions;
 with Megacorp.Behaviour;
+with Megacorp.Map.Gen;
 with Megacorp.Mission;
 with Megacorp.Shots;
 with Megacorp.Vehicles;
@@ -1649,7 +1650,7 @@ package body Megacorp.Map is
       for Index in Export_Seeds'Range loop
          declare
             M : constant City :=
-              Test_Layout (Export_Seeds (Index), Parameters.Defaults);
+              Gen.Generate (Export_Seeds (Index), Parameters.Defaults);
          begin
             Write_Map_File
               (Folder & "/seed-"
