@@ -9,6 +9,7 @@ with Ada.Strings.Fixed;
 with Megacorp.Actions;
 with Megacorp.Behaviour;
 with Megacorp.Mission;
+with Megacorp.Mission.Gen;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
 with Megacorp.Assets.Placeholder;
@@ -44,9 +45,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.13.0"
+     (Megacorp.Version = "0.14.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.13.0");
+      "version 0.14.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -403,6 +404,70 @@ begin
          and then Heights_Ok (Seed_B)
          and then Heights_Ok (Seed_C),
          "districts and storeys stay in bounds");
+   end;
+
+   declare
+      package Map renames Megacorp.Map;
+      package Gen renames Megacorp.Mission.Gen;
+      use type Ada.Containers.Count_Type;
+      use type Megacorp.Mission.Status;
+
+      function Won_Set (Seed : RNG.Word) return Boolean;
+      function Won_Set (Seed : RNG.Word) return Boolean is
+         City : constant Map.City :=
+           Map.Gen.Generate (Seed, Defaults);
+         Plan : constant Gen.Scene := Gen.Build (City, Seed);
+         Run  : constant Megacorp.Mission.Trace :=
+           Gen.Solve (City, Seed);
+      begin
+         return Run.Outcome.Outcome = Megacorp.Mission.Won
+           and then Gen.In_Band (City, Plan)
+           and then Gen.Reachable (City, Plan)
+           and then Gen.Car_Moved (City, Seed);
+      end Won_Set;
+
+      Seen_Light : Boolean := False;
+      Seen_Firm  : Boolean := False;
+      Seen_Heavy : Boolean := False;
+      Sweep : Boolean := True;
+      City : constant Map.City :=
+        Map.Gen.Generate (42, Defaults);
+      First : constant Gen.Scene := Gen.Build (City, 42);
+      Again : constant Gen.Scene := Gen.Build (City, 42);
+      Run_A : constant Megacorp.Mission.Trace :=
+        Gen.Solve (City, 42);
+      Run_B : constant Megacorp.Mission.Trace :=
+        Gen.Solve (City, 42);
+   begin
+      for Seed in 1 .. 50 loop
+         declare
+            Sample : constant Map.City :=
+              Map.Gen.Generate (RNG.Word (Seed), Defaults);
+            Plan : constant Gen.Scene :=
+              Gen.Build (Sample, RNG.Word (Seed));
+         begin
+            Sweep := Sweep and then Won_Set (RNG.Word (Seed));
+            case Plan.Level is
+               when Gen.Light =>
+                  Seen_Light := True;
+               when Gen.Firm =>
+                  Seen_Firm := True;
+               when Gen.Heavy =>
+                  Seen_Heavy := True;
+            end case;
+         end;
+      end loop;
+      Smoke_Check.Expect
+        (Sweep and then Seen_Light and then Seen_Firm and then Seen_Heavy,
+         "generated missions are solvable");
+      Smoke_Check.Expect
+        (Gen.Same (First, Again)
+         and then Run_A.Outcome.Tick = Run_B.Outcome.Tick
+         and then Run_A.Frames.Length = Run_B.Frames.Length
+         and then Gen.In_Band (City, First)
+         and then Gen.Reachable (City, First)
+         and then Gen.Car_Moved (City, 42),
+         "population and recipe repeat");
    end;
 
    declare

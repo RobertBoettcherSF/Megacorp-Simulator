@@ -370,7 +370,8 @@ function refreshStatus() {
     return;
   }
   if (currentMotion()) {
-    if (currentMotion().label === "Mission") {
+    if (currentMotion().label === "Mission"
+      || currentMotion().label === "Generated") {
       status.textContent =
         "The mission trace is precomputed by Ada, not run in the browser.";
     } else if (currentMotion().item) {

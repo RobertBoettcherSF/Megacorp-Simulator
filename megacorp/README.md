@@ -1,8 +1,8 @@
-# Megacorp Simulator 0.13.0
+# Megacorp Simulator 0.14.0
 
-Headless Ada core for Megacorp Simulator. Version 0.13.0 adds
-the city-block generator (design item 13). Item 12, the C++
-comparison, stays skipped, so there is no 0.12.0.
+Headless Ada core for Megacorp Simulator. Version 0.14.0 fills a
+generated city and plays a mission recipe on it (design item 14).
+Item 12, the C++ comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -46,7 +46,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.13.0.zip` for
+It also writes `dist/megacorp_v0.14.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -81,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.13.0 contains
+## What 0.14.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -97,7 +97,17 @@ of different sizes, four districts, parks, a river with bridges, and
 one lake kept off the roads. Sidewalks are the walkable cells beside
 a road, and one door niche opens the south face of a built block.
 `Test_Layout` is still there. The older unit checks call it. The
-export, the sample, and `--mission` call `Generate`.
+export and the sample call `Generate`.
+
+`Megacorp.Mission.Gen` fills that city from the Block and Mission
+streams. Eight people fit in the ped id range: the agent, a contact,
+two corporate guards, one more residential civilian, a slum civilian
+who drives a car, and two police on separate beats. Two more vehicles
+stay parked. One case and one cache sit on the ground. A recipe is
+one of briefing, snatch, or contract. It names the objectives, where
+they sit, an opposition level, and the tick cap. `bin/megacorp
+--mission SEED` plays that recipe. The street fixture is still what
+the older mission checks call.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads

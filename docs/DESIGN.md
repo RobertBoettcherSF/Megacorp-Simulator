@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.14.0, item 14
+
+`Megacorp.Mission.Gen` fills a generated city and gives it a mission recipe. The Block stream picks the stage. The Mission stream picks the recipe. Civilians, corporate guards, a police pair, parked cars, one car that drives, a case, and a cache come from that placement. The recipe is the objective set, the tiles those objectives use, an opposition level, and a tick cap. `bin/megacorp --mission SEED` runs it. Seeds 1, 42, and 100 export a Generated trace beside the older demos. The street fixture stays for the checks that name it.
+
 ### 2026-11-10 — version 0.13.0, item 13
 
 `Megacorp.Map.Gen` builds a 128×128 city from the city-1 child of the world seed. The road grid includes the border and interior lines with gaps of 7 to 13 tiles, so the blocks are not one size. Four districts share the map: a corporate core, a residential field, an industrial strip, and a slum strip on the opposite side. Building height follows the district of that tile. Some blocks stay open as parks. A river crosses the city and the roads that meet it are bridges. One lake sits off the roads. Sidewalks are the open cells beside a road, and a built block keeps one pavement niche on its south face.
@@ -192,6 +196,22 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **What stays on Test_Layout.** The 5×5 bounds check and the 24×24 layout equality checks still call `Test_Layout`. The export, the text sample, `--mission`, and the seeded demos call `Generate`.
 
+### Item 14 — block population and mission recipes
+
+**Streams.** Placement draws on `RNG.Child (Make (Seed), Block, 1)`. The recipe draws on `RNG.Child (Make (Seed), Mission, 1)`. Those are not the City stream the map already consumed, so generating the city and filling it do not move each other.
+
+**Eight people.** `Peds.Ped_Id` is 1..8, and `Vehicles.Vehicle_Id` is 1..4, and `Actions.Item_Id` is 1..4. A crowd the size of the residential area does not fit. The cast is the agent, the contact, two guards, one more residential civilian, one slum civilian, and two police. Industrial civilians are zero. Corporate civilians are whoever of the contact happens to stand in the core, which the band allows as 0 or 1. The alternative was to raise the ped id cap. That would have changed the type every earlier package stores, so this item stays inside the cap.
+
+**Where they stand.** The stage is the first road column of six tiles, in row-major order, whose south end has a walkable side tile touching a corporate building. The block stream picks one of the first 16 such columns. The agent stands one tile south of the contact. The case is two tiles further south. The stand, which is also the evacuation tile, is the south end. The target guard stands on that side tile, one step from the agent, so the pistol hit chance is 100. The second guard stands at another corporate door. The residential civilian and the cache are on residential ground away from the stage. The slum civilian's car drives seven tiles of slum road, also away from the stage. The two police beats are a horizontal run and a vertical run, neither of them through the stage. Two other cars are parked on roads.
+
+**Why the extras do not block the squad.** The contact, the residential civilian, and the police are given a wait or a walk on their own beat. The guards patrol in place, and guards do not shoot an agent. The driver enters the car, drives, and gets out. Leaving them aboard after the drive made the next wander order drop them to standing while the seat still held them, and the following tick then failed the riding precondition. The exit is the fix.
+
+**Recipes.** The mission stream picks one of three. Briefing is persuade and evacuate, opposition light, cap 100. Snatch is acquire, eliminate, and evacuate, opposition firm, cap 160. Contract is all four, opposition heavy, cap 200. Opposition here is which set and which cap, not a larger cast, because both guard posts are already filled. A roll for extra hostiles was the alternative. Hostiles shoot the agent, and a 50-seed sweep could not promise a win.
+
+**Solved.** The auto-squad's script is queued at tick 1. Briefing waits beside the contact, then walks to the zone. Snatch walks to the case, picks it up, walks to the zone, and shoots the guard. Contract does the wait and then the snatch. Seeds 1 through 50 all win. On those seeds the split is 19 briefings, 18 snatches, and 13 contracts. Seed 42 is a briefing and wins at tick 44.
+
+**Page.** Seeds 1, 42, and 100 gain a Generated trace: the eight people, the objectives, the two parked vehicles, and the car the slum civilian drives. The older Mission trace stays.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -202,7 +222,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13 (version 0.13.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11, 13, and 14 (version 0.14.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -574,7 +594,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 ### Phase C — Procedural generation
 
 13. **City-block generator.** Done in 0.13.0. From the city seed and the city-map size (default 128×128): ground, a road grid with varied block sizes, districts, building heights, doors, parks, a river with bridges, and sidewalks that pathfinding accepts. `Test_Layout` remains for its unit checks. Depends on: 3, 2, 4, 5. Try: the smoke test, `bin/megacorp` for a text sample of seed 42, and the browser page for seeds 1, 42, and 100. Size: new work, medium-large.
-14. **Block population and mission recipes.** Peds, vehicles, items, corp guards, a generated objective. Depends on: 13, 11. Try: `generate --seed=42 --mission` then auto-tick a smoke script (e.g. walk toward the target). Size: medium.
+14. **Block population and mission recipes.** Done in 0.14.0. From the Block and Mission streams: civilians, corporate guards, police beats, parked and moving vehicles, items, and a recipe of objectives, placement, opposition, and a tick cap. `bin/megacorp --mission SEED` plays it. Depends on: 13, 11. Try: the smoke test, `bin/megacorp --mission 42`, and the browser page's Generated trace for seeds 1, 42, and 100. Size: medium.
 15. **World and city generator.** Regions (default about 40), neighbours, cities, initial territory, population/tax baselines, corporations (default 4). Depends on: 2, 13. Try: print a world map and corp owners for seed 42; regenerate and match. Size: medium.
 16. **Corporation AI hook.** Between missions, seeded territory/research pressure (the idea of `simulate_enemy_moves`, not a port of that routine). Depends on: 15. Try: after a simulated “week”, ownership changes are stable for that seed. Size: small-medium.
 
