@@ -322,13 +322,14 @@ function showTick() {
       return "";
     }
     const action = frame.action || "(none)";
+    const mood = frame.mood ? ` [${frame.mood}]` : "";
     const rest = frame.queue && frame.queue.length
       ? frame.queue.join(", ")
       : "(none)";
     const hp = typeof frame.health === "number"
       ? ` hp ${frame.health}${frame.alive === false ? " down" : ""} ammo ${frame.ammo}`
       : "";
-    return `Ped ${ped.id}: ${action}${hp} — remaining: ${rest}`;
+    return `Ped ${ped.id}: ${action}${mood}${hp} — remaining: ${rest}`;
   }).filter(Boolean).join("   ");
   if (motion.vehicles) {
     const cars = motion.vehicles.map((car) => {
@@ -368,6 +369,9 @@ function refreshStatus() {
     } else if (currentMotion().label === "Vehicles") {
       status.textContent =
         "Paths, driving, and shots are precomputed by Ada, not run in the browser.";
+    } else if (currentMotion().label === "Behaviour") {
+      status.textContent =
+        "Moods, patrols, and shots are precomputed by Ada, not run in the browser.";
     } else {
       status.textContent =
         "Paths and ped motion are precomputed by Ada, not run in the browser.";
@@ -422,7 +426,14 @@ function drawPeds(ctx) {
     }
     const angle = ANGLE[frame.facing] ?? 0;
     const ink = { 1: "#ffe14a", 2: "#7fd0ff", 3: "#ff8f6b", 4: "#d7c4ff" };
-    ctx.fillStyle = ink[ped.id] || "#f4f1ea";
+    const roleInk = {
+      civilian: "#ffe14a",
+      guard: "#e08a3c",
+      police: "#7fd0ff",
+      hostile: "#ff5a5a",
+      agent: "#d7c4ff"
+    };
+    ctx.fillStyle = (ped.role && roleInk[ped.role]) || ink[ped.id] || "#f4f1ea";
     ctx.beginPath();
     ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
     ctx.fill();

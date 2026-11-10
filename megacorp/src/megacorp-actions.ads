@@ -102,6 +102,14 @@ package Megacorp.Actions is
    function Ped_Alive (A : Actor) return Boolean;
    function Ped_Ammo (A : Actor) return Natural;
 
+   --  What the front action did on the tick that just finished.
+   function Ran (A : Actor) return Boolean;
+   function Ran_Action (A : Actor) return String;
+   function Shot_This_Tick (A : Actor) return Boolean;
+   function Shot_Landed (A : Actor) return Boolean;
+   function Shot_X (A : Actor) return Positive;
+   function Shot_Y (A : Actor) return Positive;
+
    function Distinct (Group : Cast) return Boolean;
 
    --  Put a ped in a vehicle before the first tick. The ped rides

@@ -1,8 +1,9 @@
-# Megacorp Simulator 0.9.0
+# Megacorp Simulator 0.10.0
 
-Headless Ada core for Megacorp Simulator. Version 0.9.0 adds
-cars and vans: drive on roads, enter, exit, and wrecks (design
-items 1–9). Version 0.6.1 keeps the browser page working when
+Headless Ada core for Megacorp Simulator. Version 0.10.0 adds
+ped behaviour: flee, panic, patrol, engage, a police warning, and
+persuasion (design items 1–10). Version 0.6.1 keeps the browser
+page working when
 WebKit refuses to read the atlas pixels. Later packages are still
 specs.
 
@@ -43,7 +44,8 @@ That builds with `gprbuild -P megacorp.gpr -p`, regenerates the
 tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
-and the vehicle demo. It also writes `dist/megacorp_v0.9.0.zip` for
+the vehicle demo, and the behaviour demo. It also writes
+`dist/megacorp_v0.10.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -78,7 +80,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.9.0 contains
+## What 0.10.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -131,6 +133,13 @@ road flag. A ped queue can enter, drive, and exit. Passengers move
 with the vehicle. An intact vehicle blocks its tile. A shot can
 wreck it; the wreck stops and the passengers are ejected.
 
+`Megacorp.Behaviour` sets a mood on each ped after the action
+queue. Civilians wander, then flee from gunfire, and panic spreads
+to a nearby civilian. Guards patrol and shoot a hostile in sight.
+Police warn for 12 ticks, then fire. An agent can persuade a
+neighbour; that civilian follows and does not flee. Each ped uses
+its own child of the scene seed.
+
 `web/index.html` draws the exported seeds. Flat view is one colour per
 terrain. Isometric view uses the atlas and the exported tile id, back
 to front, with building stacks. Each seed includes Ada-computed walk
@@ -144,12 +153,16 @@ draws the case until it is picked up. Each seed also has a
 firefight: shot lines, health bars, and ammo from the Ada trace.
 Each seed also has a vehicle trace: a ped enters a car, drives
 the roads, and gets out, while another ped shoots a van. The page
-draws the car and the van. It does not simulate.
+draws the car and the van. Each seed also has a behaviour trace:
+civilians flee, a guard patrols, another guard shoots, and a
+police officer warns then fires. Colour on that trace is the
+role, and the mood is printed beside the action. The page does
+not simulate.
 Zoom and hover work in both views. If the browser will not read the
 atlas pixels, hover uses the tile diamond and the map still loads.
 
 Shells only, for later items: `Types`, `Assets`, `World`, `World.Gen`,
-`Map.Gen`, `Behaviour`, `Mission`, `Mission.Gen`, `Agents`,
+`Map.Gen`, `Mission`, `Mission.Gen`, `Agents`,
 `Research`, `Session`, `Save`, `API`. There is no Syndicate asset
 package.
 

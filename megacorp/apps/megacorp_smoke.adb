@@ -7,6 +7,7 @@ with Ada.Text_IO;
 with Ada.Containers;
 with Ada.Strings.Fixed;
 with Megacorp.Actions;
+with Megacorp.Behaviour;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
 with Megacorp.Assets.Placeholder;
@@ -41,9 +42,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.9.0"
+     (Megacorp.Version = "0.10.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.9.0");
+      "version 0.10.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -1081,6 +1082,206 @@ begin
          begin
             Smoke_Check.Expect
               (One = Two, "seeded vehicle demo repeats");
+         end;
+      end loop;
+   end;
+
+   declare
+      package Map renames Megacorp.Map;
+      package Beh renames Megacorp.Behaviour;
+      package Guns renames Megacorp.Weapons;
+      use type Beh.Frame_Lists.Vector;
+      use type Beh.Mood;
+      use type Megacorp.Peds.State_Kind;
+
+      function Saw
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id;
+         Which : Beh.Mood) return Boolean;
+      function Moved_Away
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id;
+         Threat : Map.Point) return Boolean;
+      function Fired
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id) return Boolean;
+
+      function Saw
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id;
+         Which : Beh.Mood) return Boolean
+      is
+      begin
+         for I in Trace.First_Index .. Trace.Last_Index loop
+            if Trace (I).Ident = Who
+              and then Trace (I).Temper = Which
+            then
+               return True;
+            end if;
+         end loop;
+         return False;
+      end Saw;
+
+      function Moved_Away
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id;
+         Threat : Map.Point) return Boolean
+      is
+         Start : Natural := 0;
+         Later : Natural;
+      begin
+         for I in Trace.First_Index .. Trace.Last_Index loop
+            if Trace (I).Ident = Who then
+               Later := Natural'Max
+                 (abs (Trace (I).X - Threat.X),
+                  abs (Trace (I).Y - Threat.Y));
+               if Start = 0 then
+                  Start := Later;
+               end if;
+               if Trace (I).Temper = Beh.Flee and then Later > Start then
+                  return True;
+               end if;
+            end if;
+         end loop;
+         return False;
+      end Moved_Away;
+
+      function Fired
+        (Trace : Beh.Frame_Lists.Vector;
+         Who : Megacorp.Peds.Ped_Id) return Boolean
+      is
+      begin
+         for I in Trace.First_Index .. Trace.Last_Index loop
+            if Trace (I).Ident = Who and then Trace (I).Fired then
+               return True;
+            end if;
+         end loop;
+         return False;
+      end Fired;
+
+      Yard : constant Map.City := Map.Blank (12, 16);
+      Lane : constant Map.City := Map.Blank (8, 8);
+      Road : constant Map.City := Map.Blank (12, 4);
+      Room : constant Map.City := Map.Blank (6, 4);
+      Gun  : constant Guns.Kind := Guns.Pistol;
+      Rounds : constant Natural := Guns.Profile (Gun).Magazine;
+      Crowd : Beh.Crowd (1 .. 3);
+      Pair : Beh.Crowd (1 .. 2);
+      One : Beh.Crowd (1 .. 1);
+      Trace : Beh.Frame_Lists.Vector;
+      Again : Beh.Frame_Lists.Vector;
+      Visits_A : Natural;
+      Visits_B : Natural;
+      Closer : Boolean;
+      Warned : Natural;
+      Shot : Natural;
+   begin
+      Crowd (1) := Beh.Enlist (1, Beh.Hostile, (X => 2, Y => 2), Yard, 3);
+      Crowd (2) := Beh.Enlist (2, Beh.Civilian, (X => 2, Y => 8), Yard, 3);
+      Crowd (3) := Beh.Enlist (3, Beh.Civilian, (X => 6, Y => 11), Yard, 3);
+      Beh.Arm (Crowd, 1, Gun, Rounds);
+      Trace := Beh.Run (Yard, Crowd, 40);
+      Again := Beh.Run (Yard, Crowd, 40);
+      Smoke_Check.Expect
+        (Saw (Trace, 2, Beh.Flee)
+         and then Moved_Away (Trace, 2, (X => 2, Y => 2))
+         and then Saw (Trace, 3, Beh.Flee)
+         and then Trace = Again,
+         "civilians flee and panic spreads");
+
+      Pair (1) := Beh.Enlist (1, Beh.Guard, (X => 2, Y => 2), Lane, 4);
+      Pair (2) := Beh.Enlist (2, Beh.Hostile, (X => 2, Y => 6), Lane, 4);
+      Beh.Arm (Pair, 1, Gun, Rounds);
+      Beh.Arm (Pair, 2, Gun, Rounds);
+      Trace := Beh.Run (Lane, Pair, 24);
+      Smoke_Check.Expect
+        (Saw (Trace, 1, Beh.Engage) and then Fired (Trace, 1),
+         "a guard engages a hostile in sight");
+
+      One (1) := Beh.Enlist
+        (1, Beh.Guard, (X => 2, Y => 2), Lane, 5,
+         (X => 2, Y => 2), (X => 2, Y => 6));
+      Beh.Arm (One, 1, Gun, Rounds);
+      Trace := Beh.Run (Lane, One, 160);
+      Visits_A := 0;
+      Visits_B := 0;
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Trace (I).State = Megacorp.Peds.Arrived
+           and then Trace (I).X = 2
+           and then Trace (I).Y = 2
+         then
+            Visits_A := Visits_A + 1;
+         elsif Trace (I).State = Megacorp.Peds.Arrived
+           and then Trace (I).X = 2
+           and then Trace (I).Y = 6
+         then
+            Visits_B := Visits_B + 1;
+         end if;
+      end loop;
+      Smoke_Check.Expect
+        (Visits_A >= 2 and then Visits_B >= 2,
+         "a guard patrols a loop");
+
+      Crowd (1) := Beh.Enlist (1, Beh.Police, (X => 2, Y => 2), Road, 6);
+      Crowd (2) := Beh.Enlist (2, Beh.Hostile, (X => 6, Y => 2), Road, 6);
+      Crowd (3) := Beh.Enlist (3, Beh.Civilian, (X => 7, Y => 2), Road, 6);
+      Beh.Arm (Crowd, 1, Gun, Rounds);
+      Beh.Arm (Crowd, 2, Gun, Rounds);
+      Trace := Beh.Run (Road, Crowd, 40);
+      Warned := 0;
+      Shot := 0;
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Trace (I).Ident = 1 and then Trace (I).Temper = Beh.Warn
+           and then Warned = 0
+         then
+            Warned := Trace (I).Tick;
+         end if;
+         if Trace (I).Ident = 1 and then Trace (I).Fired and then Shot = 0
+         then
+            Shot := Trace (I).Tick;
+         end if;
+      end loop;
+      Smoke_Check.Expect
+        (Warned > 0 and then Shot >= Warned + Beh.Warn_Ticks,
+         "police warn before they fire");
+
+      Crowd (1) := Beh.Enlist (1, Beh.Police, (X => 2, Y => 2), Yard, 7);
+      Crowd (2) := Beh.Enlist (2, Beh.Hostile, (X => 9, Y => 2), Yard, 7);
+      Crowd (3) := Beh.Enlist (3, Beh.Civilian, (X => 10, Y => 2), Yard, 7);
+      Beh.Arm (Crowd, 2, Gun, Rounds);
+      Trace := Beh.Run (Yard, Crowd, 20);
+      Closer := False;
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Trace (I).Ident = 1 and then Trace (I).X > 2 then
+            Closer := True;
+         end if;
+      end loop;
+      Smoke_Check.Expect (Closer, "police walk toward a heard shot");
+
+      Pair (1) := Beh.Enlist (1, Beh.Agent, (X => 2, Y => 2), Room, 8);
+      Pair (2) := Beh.Enlist (2, Beh.Civilian, (X => 3, Y => 2), Room, 8);
+      Trace := Beh.Run (Room, Pair, 16);
+      Smoke_Check.Expect
+        (Saw (Trace, 2, Beh.Persuaded),
+         "an agent persuades a neighbour");
+
+      One (1) := Beh.Enlist (1, Beh.Civilian, (X => 3, Y => 3), Lane, 9);
+      Trace := Beh.Run (Lane, One, 16);
+      Smoke_Check.Expect
+        (Saw (Trace, 1, Beh.Wander),
+         "a calm civilian wanders");
+
+      for Seed of Map.Export_Seeds loop
+         declare
+            Layout : constant Map.City :=
+              Map.Test_Layout (Seed, Defaults);
+            First : constant Beh.Frame_Lists.Vector :=
+              Beh.Run_Street (Layout, Seed);
+            Second : constant Beh.Frame_Lists.Vector :=
+              Beh.Run_Street (Layout, Seed);
+         begin
+            Smoke_Check.Expect
+              (First = Second, "seeded behaviour demo repeats");
          end;
       end loop;
    end;

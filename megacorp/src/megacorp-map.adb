@@ -4,6 +4,7 @@
 with Ada.Directories;
 with Ada.Text_IO;
 with Megacorp.Actions;
+with Megacorp.Behaviour;
 with Megacorp.Shots;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
@@ -928,6 +929,16 @@ package body Megacorp.Map is
       Who : Positive;
       Last_Item : Boolean);
    procedure Write_Drive (File : Ada.Text_IO.File_Type; M : City);
+   procedure Write_Mood_Frame
+     (File : Ada.Text_IO.File_Type;
+      Item : Behaviour.Frame;
+      Last_Item : Boolean);
+   procedure Write_Mood_Ped
+     (File : Ada.Text_IO.File_Type;
+      Trace : Behaviour.Frame_Lists.Vector;
+      Who : Peds.Ped_Id;
+      Last_Item : Boolean);
+   procedure Write_Behaviour (File : Ada.Text_IO.File_Type; M : City);
 
    function Fight_Of (M : City) return Duel_Points is
       Start : constant Point := Locate (M, Pavement, False);
@@ -1102,8 +1113,126 @@ package body Megacorp.Map is
       Write_Vehicle (File, Trace.Cars, 1, False);
       Write_Vehicle (File, Trace.Cars, 2, True);
       Ada.Text_IO.Put_Line (File, "      ]");
-      Ada.Text_IO.Put_Line (File, "    }");
+      Ada.Text_IO.Put_Line (File, "    },");
    end Write_Drive;
+
+   procedure Write_Mood_Frame
+     (File : Ada.Text_IO.File_Type;
+      Item : Behaviour.Frame;
+      Last_Item : Boolean)
+   is
+   begin
+      Ada.Text_IO.Put (File, "          {""t"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Tick)));
+      Ada.Text_IO.Put (File, ",""x"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.X)));
+      Ada.Text_IO.Put (File, ",""y"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Y)));
+      Ada.Text_IO.Put (File, ",""along"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Along)));
+      Ada.Text_IO.Put (File, ",""facing"":""");
+      Ada.Text_IO.Put (File, Facing_Token (Item.Facing));
+      Ada.Text_IO.Put (File, """,""state"":""");
+      Ada.Text_IO.Put (File, State_Token (Item.State));
+      Ada.Text_IO.Put (File, """,""mood"":""");
+      Ada.Text_IO.Put (File, Behaviour.Mood_Token (Item.Temper));
+      Ada.Text_IO.Put (File, """,""action"":""");
+      if Item.Has_Action then
+         Ada.Text_IO.Put
+           (File, Act.Token_Strings.To_String (Item.Action));
+      end if;
+      Ada.Text_IO.Put (File, """,""health"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Health)));
+      Ada.Text_IO.Put (File, ",""ammo"":");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Ammo)));
+      Ada.Text_IO.Put (File, ",""alive"":");
+      if Item.Alive then
+         Ada.Text_IO.Put (File, "true");
+      else
+         Ada.Text_IO.Put (File, "false");
+      end if;
+      if Item.Fired then
+         Ada.Text_IO.Put (File, ",""shot"":{""hit"":");
+         if Item.Landed then
+            Ada.Text_IO.Put (File, "true");
+         else
+            Ada.Text_IO.Put (File, "false");
+         end if;
+         Ada.Text_IO.Put (File, ",""x"":");
+         Ada.Text_IO.Put (File, Trim (Integer'Image (Item.At_X)));
+         Ada.Text_IO.Put (File, ",""y"":");
+         Ada.Text_IO.Put (File, Trim (Integer'Image (Item.At_Y)));
+         Ada.Text_IO.Put (File, "}}");
+      else
+         Ada.Text_IO.Put (File, ",""shot"":null}");
+      end if;
+      if Last_Item then
+         Ada.Text_IO.New_Line (File);
+      else
+         Ada.Text_IO.Put_Line (File, ",");
+      end if;
+   end Write_Mood_Frame;
+
+   procedure Write_Mood_Ped
+     (File : Ada.Text_IO.File_Type;
+      Trace : Behaviour.Frame_Lists.Vector;
+      Who : Peds.Ped_Id;
+      Last_Item : Boolean)
+   is
+      Count : Natural := 0;
+      Seen  : Natural := 0;
+      Job   : Behaviour.Role := Behaviour.Civilian;
+   begin
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Trace (I).Ident = Who then
+            Count := Count + 1;
+            Job := Trace (I).Job;
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "      {");
+      Ada.Text_IO.Put (File, "        ""id"": ");
+      Ada.Text_IO.Put (File, Trim (Integer'Image (Integer (Who))));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        ""role"": """ & Behaviour.Role_Token (Job) & """,");
+      Ada.Text_IO.Put_Line (File, "        ""frames"": [");
+      for I in Trace.First_Index .. Trace.Last_Index loop
+         if Trace (I).Ident = Who then
+            Seen := Seen + 1;
+            Write_Mood_Frame (File, Trace (I), Seen = Count);
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "        ]");
+      if Last_Item then
+         Ada.Text_IO.Put_Line (File, "      }");
+      else
+         Ada.Text_IO.Put_Line (File, "      },");
+      end if;
+   end Write_Mood_Ped;
+
+   procedure Write_Behaviour (File : Ada.Text_IO.File_Type; M : City) is
+      Trace : constant Behaviour.Frame_Lists.Vector :=
+        Behaviour.Run_Street (M, Layout_Seed (M));
+   begin
+      Ada.Text_IO.Put_Line (File, "    {");
+      Ada.Text_IO.Put_Line
+        (File, "      ""label"": ""Behaviour"",");
+      Ada.Text_IO.Put (File, "      ""steps_per_tile"": ");
+      Ada.Text_IO.Put
+        (File, Trim (Integer'Image (Peds.Steps_Per_Tile)));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put_Line (File, "      ""peds"": [");
+      Write_Mood_Ped (File, Trace, 1, False);
+      Write_Mood_Ped (File, Trace, 2, False);
+      Write_Mood_Ped (File, Trace, 3, False);
+      Write_Mood_Ped (File, Trace, 4, False);
+      Write_Mood_Ped (File, Trace, 5, False);
+      Write_Mood_Ped (File, Trace, 6, False);
+      Write_Mood_Ped (File, Trace, 7, True);
+      Ada.Text_IO.Put_Line (File, "      ]");
+      Ada.Text_IO.Put_Line (File, "    }");
+   end Write_Behaviour;
 
    procedure Write_Paths
      (File : Ada.Text_IO.File_Type; M : City)
@@ -1136,7 +1265,14 @@ package body Megacorp.Map is
       begin
          Put_Route
            (File, M, "Vehicles", Path.Drive,
-            Plan.Car_At, Plan.Goal, True);
+            Plan.Car_At, Plan.Goal, False);
+      end;
+      declare
+         Scene : constant Behaviour.Street_Plan := Behaviour.Street (M);
+      begin
+         Put_Route
+           (File, M, "Behaviour", Path.Walk,
+            Scene.Patrol_A, Scene.Patrol_B, True);
       end;
       Ada.Text_IO.Put_Line (File, "  ]");
    end Write_Paths;
@@ -1270,6 +1406,7 @@ package body Megacorp.Map is
          Write_Script (File, M);
          Write_Fight (File, M);
          Write_Drive (File, M);
+         Write_Behaviour (File, M);
          Ada.Text_IO.Put_Line (File, "  ]");
       end;
    end Write_Motion;
