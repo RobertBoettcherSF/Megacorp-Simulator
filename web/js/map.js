@@ -106,6 +106,7 @@ function drawFlat(ctx) {
   }
   document.getElementById("zoom-label").textContent = `${tilePx} px`;
   drawPath(ctx);
+  drawVehicles(ctx);
   drawPeds(ctx);
   drawShots(ctx);
   drawItem(ctx);
@@ -165,6 +166,7 @@ function drawIso(ctx) {
   }
   document.getElementById("zoom-label").textContent = `${scale}×`;
   drawPath(ctx);
+  drawVehicles(ctx);
   drawPeds(ctx);
   drawShots(ctx);
   drawItem(ctx);
@@ -290,6 +292,11 @@ function maxTick() {
       max = Math.max(max, ped.frames[ped.frames.length - 1].t);
     }
   });
+  (motion.vehicles || []).forEach((car) => {
+    if (car.frames && car.frames.length > 0) {
+      max = Math.max(max, car.frames[car.frames.length - 1].t);
+    }
+  });
   return max;
 }
 
@@ -323,6 +330,19 @@ function showTick() {
       : "";
     return `Ped ${ped.id}: ${action}${hp} — remaining: ${rest}`;
   }).filter(Boolean).join("   ");
+  if (motion.vehicles) {
+    const cars = motion.vehicles.map((car) => {
+      const frame = frameAt(car, tick);
+      if (!frame) {
+        return "";
+      }
+      const state = frame.intact === false ? "wrecked" : frame.state;
+      return `${car.kind} ${car.id}: ${state} hp ${frame.health}`;
+    }).filter(Boolean).join("   ");
+    if (cars) {
+      panel.textContent = `${panel.textContent}   ${cars}`;
+    }
+  }
 }
 
 function stopPlayback() {
@@ -345,6 +365,9 @@ function refreshStatus() {
     } else if (currentMotion().label === "Firefight") {
       status.textContent =
         "Paths, ped motion, and shots are precomputed by Ada, not run in the browser.";
+    } else if (currentMotion().label === "Vehicles") {
+      status.textContent =
+        "Paths, driving, and shots are precomputed by Ada, not run in the browser.";
     } else {
       status.textContent =
         "Paths and ped motion are precomputed by Ada, not run in the browser.";
@@ -393,8 +416,13 @@ function drawPeds(ctx) {
     }
     const at = pedPoint(frame, steps);
     const radius = view === "iso" ? 5 * isoScale : Math.max(4, tilePx * 0.45);
+    if (frame.state === "riding") {
+      const nudge = (ped.id % 2 === 0 ? 1 : -1) * radius * 0.7;
+      at.x += nudge;
+    }
     const angle = ANGLE[frame.facing] ?? 0;
-    ctx.fillStyle = ped.id === 1 ? "#ffe14a" : "#7fd0ff";
+    const ink = { 1: "#ffe14a", 2: "#7fd0ff", 3: "#ff8f6b", 4: "#d7c4ff" };
+    ctx.fillStyle = ink[ped.id] || "#f4f1ea";
     ctx.beginPath();
     ctx.arc(at.x, at.y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -417,6 +445,48 @@ function drawPeds(ctx) {
       ctx.fillStyle = frame.alive === false ? "#8a847c" : "#5dce6a";
       ctx.fillRect(left, top, bar * Math.max(0, frame.health) / 100, thick);
     }
+  });
+  ctx.restore();
+}
+
+function drawVehicles(ctx) {
+  const motion = currentMotion();
+  if (!motion || !motion.vehicles) {
+    return;
+  }
+  const steps = motion.steps_per_tile;
+  ctx.save();
+  motion.vehicles.forEach((car) => {
+    const frame = frameAt(car, tick);
+    if (!frame) {
+      return;
+    }
+    const at = pedPoint(frame, steps);
+    const radius = view === "iso" ? 6 * isoScale : Math.max(4, tilePx * 0.5);
+    const length = (car.kind === "van" ? 2.6 : 1.8) * radius;
+    const width = radius;
+    const angle = ANGLE[frame.facing] ?? 0;
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.rotate(angle);
+    ctx.fillStyle = frame.intact === false
+      ? "#6e675f"
+      : (car.kind === "van" ? "#e0a15a" : "#2fbfa8");
+    ctx.strokeStyle = "#1b140c";
+    ctx.lineWidth = Math.max(1, radius * 0.18);
+    ctx.fillRect(-length / 2, -width / 2, length, width);
+    ctx.strokeRect(-length / 2, -width / 2, length, width);
+    ctx.restore();
+    const maxHealth = frame.max || 1;
+    const bar = length;
+    const thick = Math.max(3, radius * 0.28);
+    const left = at.x - bar / 2;
+    const top = at.y + radius * 1.35;
+    ctx.fillStyle = "#241c18";
+    ctx.fillRect(left, top, bar, thick);
+    ctx.fillStyle = frame.intact === false ? "#8a847c" : "#5dce6a";
+    const fraction = Math.max(0, frame.health) / maxHealth;
+    ctx.fillRect(left, top, bar * fraction, thick);
   });
   ctx.restore();
 }

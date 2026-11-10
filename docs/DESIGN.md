@@ -2,6 +2,16 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.9.0, item 9
+
+`Megacorp.Vehicles` is a car and a van. A car has health 80, speed 2, and two seats. A van has health 120, speed 1, and four seats. Speed is sub-tile steps per tick, the same eight steps per tile a ped uses. The vehicle stores a tile, a facing, that step count, and health. It drives with `Megacorp.Path` in Drive mode, so every step is a road tile.
+
+`Enter_Vehicle`, `Exit_Vehicle`, and `Drive_To` are queue actions. A ped boards from a neighbouring tile. Passengers copy the vehicle's tile, step, and facing. An intact vehicle blocks its tile, and the next tile once a crossing has started. `Shoot_Vehicle` uses the same aim, rate, hit roll, and building line of sight as `Shoot_At`. At zero health the vehicle stops and its passengers are ejected.
+
+`bin/megacorp --export` adds that trace to seeds 1, 42, and 100. One ped walks to a car, drives along the roads, and gets out. Another ped shoots a van that already has a passenger. The page draws the car and the van in both views. It does not drive.
+
+The placeholder atlas is now written by `tools/gen_tileset` (Ada). `tools/gen_tileset.py` is gone. On this machine the PNG bytes and `tiles.json` match the previous file.
+
 ### 2026-11-10 — version 0.8.0, item 8
 
 Our own code is MIT, copyright Robert Boettcher. The imported FreeSynd trees and `megacorp/COPYING` are gone from this revision. Git history is unchanged.
@@ -38,7 +48,7 @@ Peds block each other. A ped occupies its current tile, and also the next tile o
 
 `Megacorp.Data.Virtual_FS` is a read interface: `Exists`, `Read`, and `List` by a logical path such as `assets/tiles.json`. `Virtual_FS.Native` is the disk backend and the only place asset reads call the host file system. A later WASM host can implement the same `Backend` with OPFS or fetch.
 
-The placeholder tileset is original art from `tools/gen_tileset.py` (flat-shaded isometric diamonds and building stacks, one sprite per terrain and height). It is stored as `web/assets/atlas.png` plus `web/assets/tiles.json`, with `web/assets/LICENCE.txt`. `Megacorp.Assets.Placeholder` loads that index through the virtual file system. Tile id is `Terrain'Pos * 16 + height`. Map export writes that id in each cell. The browser draws the id from the atlas; it does not choose the sprite itself. The page toggles between the flat view and an isometric view (back to front, buildings stacked in the sprite). Hover in the isometric view uses the atlas alpha so a tall building is the tile under the cursor.
+The placeholder tileset is original art (flat-shaded isometric diamonds and building stacks, one sprite per terrain and height). Version 0.4.0 drew it with `tools/gen_tileset.py`. Version 0.9.0 writes the same pictures with the Ada tool `tools/gen_tileset` and removes the Python script. It is stored as `web/assets/atlas.png` plus `web/assets/tiles.json`, with `web/assets/LICENCE.txt`. `Megacorp.Assets.Placeholder` loads that index through the virtual file system. Tile id is `Terrain'Pos * 16 + height`. Map export writes that id in each cell. The browser draws the id from the atlas; it does not choose the sprite itself. The page toggles between the flat view and an isometric view (back to front, buildings stacked in the sprite). Hover in the isometric view uses the atlas alpha so a tall building is the tile under the cursor.
 
 ### 2026-11-10 — version 0.3.0, item 3
 
@@ -46,7 +56,7 @@ The placeholder tileset is original art from `tools/gen_tileset.py` (flat-shaded
 
 `Test_Layout` is not the city-block generator. It is a seeded stand-in: open ground, a wandering river, a road grid (roads replace water, so the crossing reads as a bridge), pavement beside roads, and building blocks whose height comes from the city-1 child of the world seed. The same seed rebuilds the same map. The headless executable prints a northwest sample and a window on the river for seed 42.
 
-The browser page does not run Ada. GNAT-LLVM/AdaWebPack is not set up on this machine, so the executable writes JSON (`--export DIR`) and `web/` only draws it. `./build.sh` regenerates `web/data/`. The page is [web/index.html](../web/index.html), and once this is on `master` it is at `https://raw.githack.com/RobertBoettcherSF/ADA-Megacorp-Simulator/master/web/index.html`.
+The browser page does not run Ada. GNAT-LLVM/AdaWebPack is not set up on this machine, so the executable writes JSON (`--export DIR`) and `web/` only draws it. `./build.sh` regenerates `web/data/`. The page is [web/index.html](../web/index.html), and once this is on `master` it is at `https://raw.githack.com/RobertBoettcherSF/Megacorp-Simulator/master/web/index.html`.
 
 ### 2026-11-10 — version 0.2.0, item 2
 
@@ -86,6 +96,30 @@ Robert authorised items 8 through 28 to be built overnight, one branch and one m
 
 **Page.** Seeds 1, 42, and 100 gain a Firefight trace. The page draws a solid red line for a hit and a dashed line for a miss, a health bar, and ammo next to the tick. The older walk, path, meeting, and scripted-mission views stay.
 
+### Migration to Megacorp-Simulator
+
+This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 2026-11-10 as one commit at version 0.8.0, moved off `ADA-Megacorp-Simulator`. That history does not contain the FreeSynd trees. URLs in this document, the root README, and `megacorp/README.md` use the new name.
+
+### Item 9 — vehicles and the tileset tool
+
+**Tileset tool.** `tools/gen_tileset.py` is replaced by `tools/src/gen_tileset.adb` and `tools/src/tile_art.adb`, built with `tools/tools.gpr` and the same warning switches as the simulation. It draws the same diamonds and writes `web/assets/atlas.png`, `tiles.json`, and `LICENCE.txt`. Keeping Python as a build step was the alternative. It was rejected because the language rule says Ada does this work. The PNG is deflated with the system zlib at level 9, the same call the Python generator used. On this machine (zlib 1.3) the PNG bytes and `tiles.json` are unchanged. An uncompressed PNG was the other way to stay deterministic without zlib. It would have made the file larger, so this build keeps the zlib path.
+
+**Kinds.** Car: health 80, speed 2, two seats. Van: health 120, speed 1, four seats. These numbers are new. Speed is sub-tile steps per tick. A car crosses a tile in four ticks, twice a walking ped.
+
+**Footprint.** One tile. During a crossing the vehicle also holds the next tile, the same rule as a ped. A longer hull was the alternative. It was left out because Drive is a point search, and a hull would need a new search.
+
+**Who drives.** `Drive_To` is a ped action. It runs only while that ped is aboard that vehicle. The vehicle advances on those ticks. If two peds order the same vehicle on one tick, it advances once. There is no separate driver seat: any seated ped can give the order.
+
+**Enter and exit.** `Enter_Vehicle` succeeds when the ped is on foot, within one tile (Chebyshev), the vehicle is intact, and a seat is free. The ped does not walk onto the vehicle tile, because that tile is blocked. `Exit_Vehicle` looks for a free walkable tile in the order north, east, south, west, then the diagonals, then a two-tile ring, and last the vehicle's own tile. A failed enter clears the queue, as the other actions do. Clearing a passenger's queue does not pull them out; `Exit_Vehicle` does that, and so does ejection.
+
+**Passengers.** Each tick copies the vehicle's tile, sub-tile step, and facing onto each rider. A shot aimed at the vehicle does not also hurt the passengers. The alternative was to damage them too. It was left out so a wrecked van puts a living ped on the street, which the smoke test can see.
+
+**Blocking and wrecks.** An intact vehicle blocks walking and driving. A wreck blocks driving and does not block walking, so people can leave the tile and a later ped can walk past. Vehicles yield to a ped on foot and to a lower vehicle id. After three waiting ticks the blocked vehicle repaths. That is the ped rule on the drive graph. A separate collision model was the alternative. It was left out so one occupancy rule covers peds and vehicles.
+
+**Shots.** `Shoot_Vehicle` uses the same aim tick, rate, hit chance, and building line of sight as `Shoot_At`. At zero health the vehicle stops on its current tile and every passenger is ejected onto a free walkable tile. That ped's queue is cleared.
+
+**Page.** Seeds 1, 42, and 100 gain a Vehicles trace. One ped walks to the car, enters, drives, and exits. A passenger who started in the car rides along. A second ped shoots a van; the van stops and its passenger steps out. The page draws a teal rectangle for the car and a longer amber one for the van. Grey is a wreck. A second rider is drawn a few pixels aside so both show; the trace stores one tile. The older views stay.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -96,9 +130,9 @@ Robert authorised items 8 through 28 to be built overnight, one branch and one m
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–8 (version 0.8.0) are implemented under `megacorp/`. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–9 (version 0.9.0) are implemented under `megacorp/`. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
-**Source repo:** https://github.com/RobertBoettcherSF/ADA-Megacorp-Simulator (branch `master`, commit `fa08136b239dbcbb0370a73ef7df4420d3834513`)  
+**Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
 **Target:** all game logic in plain Ada; a thin JavaScript browser layer; world **procedurally generated** from a seed and **persistent** across sessions. Own setting, own placeholder art, no original Syndicate data.
 
@@ -460,7 +494,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 6. **Peds and movement.** Done in 0.6.0 for one ped on a path: integer sub-tile steps, 8-way facing, speed, and the states standing, walking, and arrived. A fixed tick advances the route. Peds block each other; after a short wait the higher id repaths around occupied tiles, and the lower id keeps its route. Depends on: 5. Try: the smoke test (arrival tick, a two-ped meeting, identical traces) and the browser page's play, pause, and step controls. Size: medium (`ped.cpp` is 3,184 lines overall; this item is the movement slice).
 7. **Action queue.** Done in 0.7.0. A ped has a fixed-capacity queue of walk, wait, turn, follow, and pick-up. One action runs per tick. Failure clears the queue and the ped stands. Orders replace the queue or append, and take effect on the next tick. Depends on: 6. Try: the smoke test, and the browser page's scripted mission for seeds 1, 42, and 100. Size: medium (`ia/action` + `pedactions` ~2,000+ lines). Vehicles and shooting stay later.
 8. **Weapons, shots, damage, death.** Done in 0.8.0 for pistol, SMG, and rifle, ped health, a seeded hit/miss roll, and building line-of-sight. `Shoot_At` fires until the target is down, out of reach, blocked, or out of ammo. Depends on: 6, 2. Try: the smoke test, and the browser page's firefight for seeds 1, 42, and 100. Size: medium.
-9. **Vehicles.** Drive on roads, enter/exit, collisions of the same kind as the reference. Depends on: 7. Try: ped enters a car and moves. Size: medium (`vehicle` 878 + train in the reference tree).
+9. **Vehicles.** Done in 0.9.0. A car and a van drive on roads, peds enter and exit, passengers move with the vehicle, the vehicle blocks its tiles, and shots destroy it and eject the passengers. Depends on: 7. Try: the smoke test, and the browser page's vehicle trace for seeds 1, 42, and 100. Size: medium.
 10. **Behaviour components.** Civilian panic, police wait-and-warn, persuader/persuaded. Depends on: 7, 8. Try: armed ped in sight of police produces a warning then fire after a documented delay (the reference uses 5 seconds; our delay is chosen when this item is written). Size: medium (`ia/behaviour` 412+ headers, plus ped hooks).
 11. **Mission loop.** Start, fixed ticks, objectives, success/fail, stats. Headless runner: seed, inputs, N ticks, dump state. Depends on: 7–10. Try: a fixture mission (hand-built map) completes from a recorded input file. Size: medium-large (`mission.cpp` 3,197 in the reference tree).
 12. **Comparison harness (optional but valuable).** Dump selected reference-tree state (positions, health, objective flags) vs Ada on a tiny hand-built fixture. Depends on: 11. Try: a diff report. Size: small tooling. Can lag if the C++ tree is hard to build.
@@ -519,7 +553,7 @@ Still open:
 
 ## 11. References
 
-- Repo: https://github.com/RobertBoettcherSF/ADA-Megacorp-Simulator
+- Repo: https://github.com/RobertBoettcherSF/Megacorp-Simulator
 - FreeSynd project (data warning): https://freesynd.sourceforge.io/dl.php.html
 - libsyndicate (format notes): http://paul.chavent.free.fr/libsyndicate/libsyndicate.html
 - AdaWebPack (WASM RTS + Web bindings): https://github.com/ovenpasta/adawebpack

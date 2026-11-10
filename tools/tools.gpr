@@ -1,0 +1,25 @@
+--  SPDX-License-Identifier: MIT
+--  Copyright (c) 2026 Robert Boettcher
+--  Placeholder tileset generator. Same switches as the simulation.
+with "../megacorp/switches.gpr";
+
+project Tools is
+   for Source_Dirs use ("src");
+   for Object_Dir use "obj";
+   for Exec_Dir use "bin";
+   for Main use ("gen_tileset.adb");
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      for Default_Switches ("Ada") use Switches.Ada;
+   end Compiler;
+
+   package Builder is
+      for Executable ("gen_tileset.adb") use "gen_tileset";
+      for Default_Switches ("Ada") use ("-j0");
+   end Builder;
+
+   package Linker is
+      for Default_Switches ("Ada") use ("-lz");
+   end Linker;
+end Tools;

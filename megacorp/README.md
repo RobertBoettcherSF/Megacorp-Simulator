@@ -1,14 +1,15 @@
-# Megacorp Simulator 0.8.0
+# Megacorp Simulator 0.9.0
 
-Headless Ada core for Megacorp Simulator. Version 0.8.0 adds
-weapons, line of sight, and a shoot action (design items 1–8).
-Version 0.6.1 keeps the browser page working when WebKit refuses
-to read the atlas pixels. Later packages are still specs.
+Headless Ada core for Megacorp Simulator. Version 0.9.0 adds
+cars and vans: drive on roads, enter, exit, and wrecks (design
+items 1–9). Version 0.6.1 keeps the browser page working when
+WebKit refuses to read the atlas pixels. Later packages are still
+specs.
 
 A browser page draws maps the Ada program has already exported. It
 does not run the simulation. After this branch is on `master`:
 
-<https://raw.githack.com/RobertBoettcherSF/ADA-Megacorp-Simulator/master/web/index.html>
+<https://raw.githack.com/RobertBoettcherSF/Megacorp-Simulator/master/web/index.html>
 
 The design, including Robert's decisions of 10 November 2026, is
 [`../docs/DESIGN.md`](../docs/DESIGN.md).
@@ -39,11 +40,11 @@ From this directory:
 ```
 
 That builds with `gprbuild -P megacorp.gpr -p`, regenerates the
-tileset with `tools/gen_tileset.py`, runs `bin/megacorp` and
-`bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada map
-export, including precomputed walk and drive paths and ped traces.
-It also writes `dist/megacorp_v0.7.0.zip` for local use; that
-archive is not a deliverable.
+tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
+and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
+map export, including precomputed walk and drive paths, ped traces,
+and the vehicle demo. It also writes `dist/megacorp_v0.9.0.zip` for
+local use; that archive is not a deliverable.
 
 The same steps by hand:
 
@@ -77,7 +78,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.8.0 contains
+## What 0.9.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -95,7 +96,7 @@ That layout is a stand-in until the city-block generator.
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads
 `web/assets/tiles.json` through that interface and maps terrain plus
 height to a tile id. The pictures are original, produced by
-`tools/gen_tileset.py`. See `web/assets/LICENCE.txt`.
+`tools/gen_tileset`. See `web/assets/LICENCE.txt`.
 
 `Megacorp.Path` is A* with integer costs (10 orthogonal, 14 diagonal).
 Walk uses the walkable flag. Drive uses the drivable flag. A diagonal
@@ -124,6 +125,12 @@ fight seed and blocks the shot on a building tile. `Shoot_At` aims,
 then fires until the target is down, out of reach, blocked, or out
 of rounds. A downed ped stops and that queue is cleared.
 
+`Megacorp.Vehicles` is a car and a van. Each stores a tile, an
+8-way facing, a sub-tile step, a speed, and health. Drive uses the
+road flag. A ped queue can enter, drive, and exit. Passengers move
+with the vehicle. An intact vehicle blocks its tile. A shot can
+wreck it; the wreck stops and the passengers are ejected.
+
 `web/index.html` draws the exported seeds. Flat view is one colour per
 terrain. Isometric view uses the atlas and the exported tile id, back
 to front, with building stacks. Each seed includes Ada-computed walk
@@ -135,14 +142,16 @@ turns, follows a second ped, and picks up a case. The page shows the
 current action and the remaining queue beside the tick counter, and
 draws the case until it is picked up. Each seed also has a
 firefight: shot lines, health bars, and ammo from the Ada trace.
-The page does not simulate.
+Each seed also has a vehicle trace: a ped enters a car, drives
+the roads, and gets out, while another ped shoots a van. The page
+draws the car and the van. It does not simulate.
 Zoom and hover work in both views. If the browser will not read the
 atlas pixels, hover uses the tile diamond and the map still loads.
 
 Shells only, for later items: `Types`, `Assets`, `World`, `World.Gen`,
-`Map.Gen`, `Behaviour`, `Vehicles`,
-`Mission`, `Mission.Gen`, `Agents`, `Research`, `Session`, `Save`,
-`API`. There is no Syndicate asset package.
+`Map.Gen`, `Behaviour`, `Mission`, `Mission.Gen`, `Agents`,
+`Research`, `Session`, `Save`, `API`. There is no Syndicate asset
+package.
 
 ## Licence
 

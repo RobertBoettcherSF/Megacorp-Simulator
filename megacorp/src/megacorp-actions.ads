@@ -6,6 +6,7 @@ with Ada.Strings.Bounded;
 with Megacorp.Map;
 with Megacorp.Peds;
 with Megacorp.RNG;
+with Megacorp.Vehicles;
 with Megacorp.Weapons;
 use type Ada.Containers.Count_Type;
 
@@ -18,7 +19,9 @@ use type Ada.Containers.Count_Type;
 package Megacorp.Actions is
    Capacity : constant := 8;
 
-   type Kind is (Walk_To, Wait, Turn_To, Follow, Pick_Up, Shoot_At);
+   type Kind is
+     (Walk_To, Wait, Turn_To, Follow, Pick_Up, Shoot_At,
+      Enter_Vehicle, Exit_Vehicle, Drive_To, Shoot_Vehicle);
 
    type Mode is (Replace, Append);
 
@@ -34,6 +37,12 @@ package Megacorp.Actions is
    function Make_Pick (Item : Item_Id) return Action;
    function Make_Shoot
      (Target : Peds.Ped_Id; Gun : Weapons.Kind) return Action;
+   function Make_Enter (Which : Vehicles.Vehicle_Id) return Action;
+   function Make_Exit (Which : Vehicles.Vehicle_Id) return Action;
+   function Make_Drive
+     (Which : Vehicles.Vehicle_Id; Goal : Map.Point) return Action;
+   function Make_Shoot_Vehicle
+     (Which : Vehicles.Vehicle_Id; Gun : Weapons.Kind) return Action;
 
    function Token (A : Action) return String;
 
@@ -95,6 +104,17 @@ package Megacorp.Actions is
 
    function Distinct (Group : Cast) return Boolean;
 
+   --  Put a ped in a vehicle before the first tick. The ped rides
+   --  from that vehicle's current tile.
+   procedure Embark
+     (Group : in out Cast;
+      Index : Positive;
+      Fleet : in out Vehicles.Fleet;
+      Slot : Positive;
+      Accepted : out Boolean)
+     with Pre =>
+       Index in Group'Range and then Slot in Fleet'Range;
+
    procedure Order
      (Group : in out Cast;
       Index : Positive;
@@ -108,6 +128,13 @@ package Megacorp.Actions is
      (Group : in out Cast;
       M : Map.City;
       Items : in out Bag)
+     with Pre => Distinct (Group);
+
+   procedure Tick
+     (Group : in out Cast;
+      M : Map.City;
+      Items : in out Bag;
+      Fleet : in out Vehicles.Fleet)
      with Pre => Distinct (Group);
 
    Max_Token : constant := 40;
@@ -155,6 +182,58 @@ package Megacorp.Actions is
        Start'Length > 0 and then Distinct (Start),
        Post => Run'Result.Length >= Start'Length;
 
+   type Rider_Set is array (1 .. Vehicles.Max_Seats) of Natural;
+
+   type Ride_Frame is record
+      Tick   : Natural := 0;
+      Ident  : Vehicles.Vehicle_Id := 1;
+      Sort   : Vehicles.Kind := Vehicles.Car;
+      X      : Positive := 1;
+      Y      : Positive := 1;
+      Along  : Natural := 0;
+      Facing : Map.Eight_Way := Map.South;
+      Motion : Vehicles.State_Kind := Vehicles.Parked;
+      Health : Natural := 0;
+      Cap    : Positive := 1;
+      Intact : Boolean := True;
+      Riders : Natural := 0;
+      Rider  : Rider_Set := (others => 0);
+   end record;
+
+   package Ride_Lists is new Ada.Containers.Vectors
+     (Index_Type => Positive, Element_Type => Ride_Frame);
+
+   type Outing is record
+      Peds : Shot_Lists.Vector;
+      Cars : Ride_Lists.Vector;
+   end record;
+
+   --  Where the scripted road demo places the car, the van, and
+   --  the peds. The drive is Car_At to Goal.
+   type Road_Plan is record
+      Car_At     : Map.Point := (X => 1, Y => 1);
+      Goal       : Map.Point := (X => 1, Y => 1);
+      Board      : Map.Point := (X => 1, Y => 1);
+      Ped_At     : Map.Point := (X => 1, Y => 1);
+      Van_At     : Map.Point := (X => 1, Y => 1);
+      Shooter_At : Map.Point := (X => 1, Y => 1);
+   end record;
+
+   function Vehicle_Demo (M : Map.City) return Road_Plan;
+
+   function Run_Vehicles
+     (M : Map.City; Seed : RNG.Word) return Outing;
+
+   function Play
+     (M : Map.City;
+      Start : Cast;
+      Items : Bag;
+      Fleet : Vehicles.Fleet;
+      Max_Ticks : Natural) return Outing
+     with Pre =>
+       Start'Length > 0 and then Distinct (Start),
+       Post => Play'Result.Peds.Length >= Start'Length;
+
 private
    type Action (Which : Kind := Wait) is record
       case Which is
@@ -174,6 +253,18 @@ private
             Gun      : Weapons.Kind := Weapons.Pistol;
             Aim_Left : Natural := 1;
             Gap      : Natural := 0;
+         when Enter_Vehicle =>
+            Board : Vehicles.Vehicle_Id := 1;
+         when Exit_Vehicle =>
+            Leave : Vehicles.Vehicle_Id := 1;
+         when Drive_To =>
+            Ride       : Vehicles.Vehicle_Id := 1;
+            Drive_Goal : Map.Point := (X => 1, Y => 1);
+         when Shoot_Vehicle =>
+            Rig     : Vehicles.Vehicle_Id := 1;
+            Rig_Gun : Weapons.Kind := Weapons.Pistol;
+            Rig_Aim : Natural := 1;
+            Rig_Gap : Natural := 0;
       end case;
    end record;
 

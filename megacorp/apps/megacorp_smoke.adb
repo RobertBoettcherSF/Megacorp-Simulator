@@ -7,6 +7,7 @@ with Ada.Text_IO;
 with Ada.Containers;
 with Ada.Strings.Fixed;
 with Megacorp.Actions;
+with Megacorp.Vehicles;
 with Megacorp.Weapons;
 with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
@@ -40,9 +41,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.8.0"
+     (Megacorp.Version = "0.9.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.8.0");
+      "version 0.9.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -879,6 +880,209 @@ begin
       Smoke_Check.Expect
         (Target_Hp = 0 and then not Target_Alive and then First = Again,
          "damage totals bring the target down");
+   end;
+
+   declare
+      package Map renames Megacorp.Map;
+      package Act renames Megacorp.Actions;
+      package Peds renames Megacorp.Peds;
+      package Cars renames Megacorp.Vehicles;
+      use type Act.Outing;
+      use type Map.Eight_Way;
+      use type Peds.State_Kind;
+      use type Cars.State_Kind;
+
+      Road : constant Map.Tile :=
+        (Kind => Map.Road, Level => 1,
+         Walkable => True, Drivable => True);
+      City : Map.City := Map.Blank (16, 5);
+      Hall : Map.City := Map.Blank (10, 3);
+      Group : Act.Cast (1 .. 4);
+      Pair : Act.Cast (1 .. 1);
+      Items : Act.Bag (1 .. 1);
+      Fleet : Cars.Fleet (1 .. 2);
+      Parked : Cars.Fleet (1 .. 1);
+      First : Act.Outing;
+      Again : Act.Outing;
+      Taken : Boolean;
+      On_Road : Boolean;
+      Entered : Boolean;
+      Exited : Boolean;
+      Followed : Boolean;
+      Ejected : Boolean;
+      Wrecked : Boolean;
+      Blocked : Boolean;
+      Arrived : Boolean;
+      Frame : Act.Ride_Frame;
+      Ped : Act.Snapshot;
+      X : Integer;
+      Y : Integer;
+   begin
+      for Column in 1 .. 16 loop
+         Map.Set_Tile (City, Column, 3, Road);
+      end loop;
+      Map.Set_Tile (City, 16, 1, Road);
+      for Column in 1 .. 10 loop
+         Map.Set_Tile (Hall, Column, 2, Road);
+      end loop;
+      Items (1) := (Ident => 1, X => 1, Y => 1, Here => False);
+      Group (1) := Act.Recruit (1, (X => 6, Y => 1), City, 9);
+      Group (2) := Act.Recruit (2, (X => 15, Y => 1), City, 9);
+      Group (3) := Act.Recruit (3, (X => 16, Y => 1), City, 9);
+      Group (4) := Act.Recruit (4, (X => 2, Y => 3), City, 9);
+      Fleet (1) := Cars.Park
+        (1, Cars.Car, (X => 2, Y => 3), City, Map.East);
+      Fleet (2) := Cars.Park
+        (2, Cars.Van, (X => 16, Y => 1), City, Map.South);
+      Act.Embark (Group, 4, Fleet, 1, Taken);
+      Act.Embark (Group, 3, Fleet, 2, Taken);
+      Act.Arm
+        (Group, 2, Megacorp.Weapons.Rifle,
+         Megacorp.Weapons.Profile (Megacorp.Weapons.Rifle).Magazine);
+      Act.Order
+        (Group, 1,
+         (1 => Act.Make_Walk ((X => 2, Y => 2)),
+          2 => Act.Make_Enter (1),
+          3 => Act.Make_Drive (1, (X => 12, Y => 3)),
+          4 => Act.Make_Exit (1)),
+         Act.Replace);
+      Act.Order
+        (Group, 2,
+         (1 => Act.Make_Shoot_Vehicle (2, Megacorp.Weapons.Rifle)),
+         Act.Replace);
+      First := Act.Play (City, Group, Items, Fleet, 800);
+      Again := Act.Play (City, Group, Items, Fleet, 800);
+      On_Road := True;
+      Entered := False;
+      Exited := False;
+      Followed := True;
+      Ejected := False;
+      Wrecked := False;
+      for I in First.Cars.First_Index .. First.Cars.Last_Index loop
+         Frame := First.Cars (I);
+         if not Map.Tile_At (City, Frame.X, Frame.Y).Drivable then
+            On_Road := False;
+         end if;
+         if Frame.Along > 0 then
+            X := Frame.X;
+            Y := Frame.Y;
+            case Frame.Facing is
+               when Map.East =>
+                  X := X + 1;
+               when Map.West =>
+                  X := X - 1;
+               when Map.North =>
+                  Y := Y - 1;
+               when Map.South =>
+                  Y := Y + 1;
+               when Map.North_East =>
+                  X := X + 1;
+                  Y := Y - 1;
+               when Map.South_East =>
+                  X := X + 1;
+                  Y := Y + 1;
+               when Map.South_West =>
+                  X := X - 1;
+                  Y := Y + 1;
+               when Map.North_West =>
+                  X := X - 1;
+                  Y := Y - 1;
+            end case;
+            if not Map.In_Bounds (City, X, Y)
+              or else not Map.Tile_At (City, X, Y).Drivable
+            then
+               On_Road := False;
+            end if;
+         end if;
+         if Frame.Ident = 2
+           and then Frame.Tick = First.Cars (First.Cars.Last_Index).Tick
+           and then not Frame.Intact
+           and then Frame.Motion = Cars.Wrecked
+           and then Frame.Riders = 0
+         then
+            Wrecked := True;
+         end if;
+         for R in 1 .. Frame.Riders loop
+            for P in First.Peds.First_Index .. First.Peds.Last_Index loop
+               Ped := First.Peds (P);
+               if Ped.Tick = Frame.Tick
+                 and then Integer (Ped.Ident) = Frame.Rider (R)
+                 and then (Ped.X /= Frame.X
+                           or else Ped.Y /= Frame.Y
+                           or else Ped.Along /= Frame.Along
+                           or else Ped.Facing /= Frame.Facing
+                           or else Ped.State /= Peds.Riding)
+               then
+                  Followed := False;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+      for I in First.Peds.First_Index .. First.Peds.Last_Index loop
+         Ped := First.Peds (I);
+         if Ped.Ident = 1 and then Ped.State = Peds.Riding then
+            Entered := True;
+         elsif Ped.Ident = 1
+           and then Entered
+           and then Ped.State = Peds.Standing
+         then
+            Exited := True;
+         end if;
+         if Ped.Ident = 3
+           and then Ped.Tick = First.Peds (First.Peds.Last_Index).Tick
+           and then Ped.State = Peds.Standing
+           and then Ped.Alive
+           and then Ped.X = 16
+           and then Ped.Y = 2
+         then
+            Ejected := True;
+         end if;
+      end loop;
+      Smoke_Check.Expect (On_Road, "vehicle stays on the road");
+      Smoke_Check.Expect
+        (Entered and then Exited, "ped enters and exits");
+      Smoke_Check.Expect (Followed, "passengers follow the vehicle");
+      Smoke_Check.Expect
+        (Wrecked and then Ejected, "a wreck ejects its riders");
+      Smoke_Check.Expect (First = Again, "vehicle trace repeats");
+
+      Pair (1) := Act.Recruit (1, (X => 1, Y => 2), Hall, 3);
+      Parked (1) := Cars.Park
+        (1, Cars.Car, (X => 5, Y => 2), Hall, Map.East);
+      Act.Order
+        (Pair, 1,
+         (1 => Act.Make_Walk ((X => 9, Y => 2))),
+         Act.Replace);
+      First := Act.Play (Hall, Pair, Items, Parked, 400);
+      Blocked := True;
+      Arrived := False;
+      for I in First.Peds.First_Index .. First.Peds.Last_Index loop
+         Ped := First.Peds (I);
+         if Ped.X = 5 and then Ped.Y = 2 then
+            Blocked := False;
+         end if;
+         if Ped.X = 9 and then Ped.Y = 2
+           and then Ped.State = Peds.Arrived
+         then
+            Arrived := True;
+         end if;
+      end loop;
+      Smoke_Check.Expect
+        (Blocked and then Arrived, "a vehicle blocks its tile");
+
+      for Seed of Map.Export_Seeds loop
+         declare
+            Layout : constant Map.City :=
+              Map.Test_Layout (Seed, Defaults);
+            One : constant Act.Outing :=
+              Act.Run_Vehicles (Layout, Seed);
+            Two : constant Act.Outing :=
+              Act.Run_Vehicles (Layout, Seed);
+         begin
+            Smoke_Check.Expect
+              (One = Two, "seeded vehicle demo repeats");
+         end;
+      end loop;
    end;
 
    if Smoke_Check.Failure_Count = 0 then
