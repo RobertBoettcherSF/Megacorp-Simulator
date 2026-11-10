@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.20.0, item 20
+
+The browser runs the Ada world, not only a precomputed export. `web/megacorp.wasm` is built by AdaWebPack 22.1.0's llvm-gnat for `wasm32-unknown-unknown` and linked with `wasm-ld`. JavaScript loads that file, calls `adainit`, `megacorp_init(42)`, and `megacorp_step`, and reads a shared buffer for the map. The header shows `engine: wasm` and the version. The day counter advances on its own. Seed 42 at day 0 and day 10 matches `bin/megacorp --engine-check` and the smoke test. If the module fails to load, the precomputed traces stay. `megacorp/wasm/build.sh` rebuilds the file and downloads the compiler if it is missing.
+
+The linked runtime is AdaWebPack's `libgnat.a`: GPL-3.0 with the GCC Runtime Library Exception 3.1. That exception allows the combined module to be distributed under MIT. The compiler and the runtime sources are not in this repository. The Text_IO stub, `To_Upper`, and the two C helpers are ours and are MIT.
+
 ### 2026-11-10 — version 0.19.0, item 19
 
 `Megacorp.Save.Migrate` walks a format one version at a time. Each step is a pure function of the file text, with a precondition on the version it accepts and a postcondition that the result is the next version and its checksum matches. Version 2 adds a research total on each corporation, default 0, and a numeric generator algorithm. A version 1 file gains `algorithm 1` and a zero research field, then a new checksum. The loader logs `migrated save from version 1 to 2`. A version above 2 is refused with `wrong format version` before the checksum is considered.
@@ -306,6 +312,18 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Fixtures.** `megacorp/tests/v1-slot.mgc` is seed 42 at day 0, written by version 0.18.0. `v1-slot.log` is four `day none` lines sealed to that file. Loading them migrates the snapshot and replays to the same day-4 line as a continuous run.
 
+### Item 20 — WebAssembly
+
+**The path that worked.** GNAT 12.3 on this machine emits x86-64 only. AdaWebPack 22.1.0 (tag of 26 November 2022, about 53 MB) includes `llvm-gnat` with a WebAssembly backend. `llvm-gcc -mtriple=wasm32-unknown-unknown` compiles the world units. `wasm-ld` from LLVM 18 links them. A newer GNAT-LLVM tree was not built: the 22.1.0 compiler already emitted a working module, and building LLVM from source was not needed.
+
+**Licence of the runtime.** The wasm `libgnat.a` in that release is the GNAT runtime: GPL-3.0 with the GCC Runtime Library Exception 3.1. The exception says a combination produced by GNAT may be conveyed under terms of our choice, so the module does not impose a GPL obligation on Megacorp. Our Ada, the two stub units, and `gnat_stub.c` are MIT. The compiler and the runtime sources are downloaded by `wasm/build.sh` and are not committed. `web/megacorp.wasm` is the combined module, which is what the static page needs.
+
+**What the runtime could not do.** Its `system.ads` sets `No_Exception_Propagation`, so the two file writers could not keep an `others` handler. They already close the file before returning. The error path no longer closes a half-written file. `Ada.Text_IO` and `Ada.Characters.Handling` are not in that runtime. The build adds small MIT units for the calls the generator actually makes (`To_Upper`, and file operations the live entry never uses). `__gnat_put_exception` and `__gnat_grow` are the two C symbols the runtime imports and does not define. `__gnat_grow` is `memory.grow`.
+
+**The page.** JavaScript only loads the module, calls `megacorp_init` and `megacorp_step`, and reads the buffer: day, corporations, regions, links. The canvas is still drawn in JS. The day counter moves by itself. Seed 42 day 0 digest is `cf28d9973a3bfe65` and day 10 is `d315dcd67089b6e9`, the same values as the native engine check. The city traces stay available from the City button. If the module does not load, the header stays `engine: trace` and the old exports draw the map.
+
+**Not the WebSocket fallback.** The module runs. A local socket server was not added.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -316,7 +334,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–19 (version 0.19.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–20 (version 0.20.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1, as logged under item 20.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -700,7 +718,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 ### Phase E — Browser front end, first playable mission
 
-20. **WASM toolchain spike.** GNAT-LLVM + AdaWebPack: Ada fills a 640×400 8-bit buffer; the page blits it. If this fails in a bounded time, switch the remaining front-end items to the WebSocket fallback without changing the Ada API. Depends on: 1. Try: a moving placeholder sprite in the browser. Size: spike (toolchain, not game logic).
+20. **WASM toolchain spike.** Done in 0.20.0. AdaWebPack 22.1.0 llvm-gnat emits the world core as `web/megacorp.wasm`. The page calls `megacorp_init` and `megacorp_step` and draws the live map. Seed 42 matches the native engine check. Depends on: 1, 15, 16. Try: open `web/index.html`; the header says `engine: wasm` and the day counter moves. `node megacorp/wasm/check.mjs` compares the module with `bin/megacorp --engine-check`. Size: spike.
 21. **Browser storage.** OPFS (IndexedDB fallback) for saves and the placeholder pack. No original-data file picker. Depends on: 4, 17, 20. Try: create a world, reload the page, the world is still there. Size: medium (JS + Host bindings).
 22. **Input and tick in the page.** Pointer/keyboard → API; fixed-step ticks; framebuffer (or display list) each frame. Depends on: 20, 11. Try: walk a ped around a generated block with the keyboard. Size: medium.
 23. **Playable first mission.** A generated block, at least one complete-able objective, shooting and movement, success/fail screen, then a save. Depends on: 14, 22, 17. Try: generate seed 42, finish the mission in the browser, reload, see the outcome and any destruction persist. Size: integration; this is the first “it feels like a game” milestone. Rough logic already built in B–D; UI glue is the added work.

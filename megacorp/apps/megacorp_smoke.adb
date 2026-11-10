@@ -28,6 +28,7 @@ with Megacorp.RNG;
 with Megacorp.Save;
 with Megacorp.Save.Log;
 with Megacorp.Save.Migrate;
+with Megacorp.API;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -52,9 +53,27 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.19.0"
+     (Megacorp.Version = "0.20.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.19.0");
+      "version 0.20.0");
+   declare
+      package Globe renames Megacorp.World.Gen;
+      package Camp renames Megacorp.World.Campaign;
+      Opened : Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+   begin
+      Megacorp.API.Init (42);
+      Smoke_Check.Expect
+        (Megacorp.API.Digest
+           = Megacorp.API.Fingerprint (Opened, 0),
+         "engine matches native day 0");
+      Megacorp.API.Step (10);
+      Camp.Run (Opened, 10);
+      Smoke_Check.Expect
+        (Megacorp.API.Digest
+           = Megacorp.API.Fingerprint (Opened, 10),
+         "engine matches native day 10");
+   end;
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40

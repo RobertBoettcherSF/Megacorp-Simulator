@@ -4,6 +4,7 @@
 with Ada.Command_Line;
 with Ada.Exceptions;
 with Ada.Text_IO;
+with Megacorp.API;
 with Megacorp.Host;
 with Megacorp.Map;
 with Megacorp.Map.Gen;
@@ -59,7 +60,17 @@ begin
       Ada.Text_IO.Put_Line ("visited regions stay as left");
    end if;
 
-   if Ada.Command_Line.Argument_Count = 2
+   if Ada.Command_Line.Argument_Count = 1
+     and then Ada.Command_Line.Argument (1) = "--engine-check"
+   then
+      Megacorp.API.Init (42);
+      Ada.Text_IO.Put_Line
+        ("engine-check day 0 " & Megacorp.API.Digest_Text);
+      Megacorp.API.Step (10);
+      Ada.Text_IO.Put_Line
+        ("engine-check day 10 " & Megacorp.API.Digest_Text);
+      return;
+   elsif Ada.Command_Line.Argument_Count = 2
      and then Ada.Command_Line.Argument (1) = "--export"
    then
       Megacorp.Map.Export_Maps
