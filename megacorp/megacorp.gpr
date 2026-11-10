@@ -1,0 +1,26 @@
+--  Entry project: builds the core library, the headless executable,
+--  and the smoke test.
+--    gprbuild -P megacorp.gpr -p
+with "switches.gpr";
+with "megacorp_lib.gpr";
+
+project Megacorp is
+   for Source_Dirs use ("apps");
+   for Object_Dir use "obj/apps";
+   for Exec_Dir use "bin";
+   for Main use ("megacorp_main.adb", "megacorp_smoke.adb");
+   for Create_Missing_Dirs use "True";
+
+   package Compiler is
+      for Default_Switches ("Ada") use Switches.Ada;
+   end Compiler;
+
+   package Builder is
+      for Executable ("megacorp_main.adb") use "megacorp";
+      for Default_Switches ("Ada") use ("-j0");
+   end Builder;
+
+   package Binder is
+      for Default_Switches ("Ada") use ("-E");
+   end Binder;
+end Megacorp;

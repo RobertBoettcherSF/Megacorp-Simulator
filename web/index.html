@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Megacorp Simulator 0.8.0</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #171a1f;
+      --panel: #22262d;
+      --ink: #e7e4dc;
+      --muted: #a8a394;
+      --line: #3a404a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.4 "Iowan Old Style", Palatino, Georgia, serif;
+    }
+    header, .controls, .readout, .note {
+      padding: 0.6rem 1.2rem;
+    }
+    header { border-bottom: 1px solid var(--line); }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+    .meta { margin: 0.2rem 0 0; color: var(--muted); }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem 1.2rem;
+      align-items: center;
+      background: var(--panel);
+    }
+    label { color: var(--muted); }
+    select, button {
+      font: inherit;
+      color: var(--ink);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0.2rem 0.6rem;
+    }
+    button { cursor: pointer; }
+    #legend { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .chip {
+      width: 0.9rem;
+      height: 0.9rem;
+      border: 1px solid var(--line);
+    }
+    .readout {
+      min-height: 1.6rem;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 0.92rem;
+    }
+    #stage {
+      margin: 0 1.2rem 1rem;
+      overflow: auto;
+      max-height: 75vh;
+      border: 1px solid var(--line);
+      background: #101216;
+    }
+    canvas { display: block; image-rendering: pixelated; }
+    .note { color: var(--muted); margin-top: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Megacorp Simulator</h1>
+    <p class="meta">version <span id="version">0.8.0</span>
+      · seed <span id="seed-label">…</span></p>
+  </header>
+  <div class="controls">
+    <label>Seed
+      <select id="seed"></select>
+    </label>
+    <label>Path
+      <select id="path"></select>
+    </label>
+    <button id="play" type="button">Play</button>
+    <button id="pause" type="button">Pause</button>
+    <button id="step" type="button">Step</button>
+    <span>Tick <span id="tick">0</span></span>
+    <span id="queue">No action queue on this trace.</span>
+    <button id="view" type="button">Flat view</button>
+    <span>
+      <button id="zoom-out" type="button">−</button>
+      <span id="zoom-label">6 px</span>
+      <button id="zoom-in" type="button">+</button>
+    </span>
+    <div id="legend"></div>
+  </div>
+  <p id="path-status" class="readout">Paths and ped motion are precomputed by Ada.</p>
+  <p id="hover" class="readout">Hover a tile.</p>
+  <div id="stage"><canvas id="map"></canvas></div>
+  <p class="note">Paths, ped motion, action queues, and shots are
+    precomputed by Ada. Play, pause, and step replay that trace.
+    The marker is the ped and the stroke is its facing. A bar above
+    a ped is health. A red shot line is a hit and a dashed line is a
+    miss. The gold diamond is an item until it is picked up.
+    A click snaps to the nearest prepared start or goal. The layout
+    is the seeded test map, not the later city-block generator.</p>
+  <script src="js/map.js"></script>
+</body>
+</html>

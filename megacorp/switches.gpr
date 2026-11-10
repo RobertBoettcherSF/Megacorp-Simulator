@@ -1,0 +1,18 @@
+--  Compiler switches shared by the library and the executables.
+--  -gnat2012  Ada 2012 (Pre, Post, Type_Invariant)
+--  -gnata     compile assertions and contracts in
+--  -gnato     enable overflow checks
+--  -gnatwa    standard optional warnings
+--  -gnatwe    warnings and style checks are errors
+--  -gnaty     GNAT style checks
+--  -g         debug information
+abstract project Switches is
+   Ada :=
+     ("-gnat2012",
+      "-gnata",
+      "-gnato",
+      "-gnatwa",
+      "-gnatwe",
+      "-gnaty",
+      "-g");
+end Switches;

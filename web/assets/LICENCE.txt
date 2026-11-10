@@ -1,0 +1,9 @@
+Megacorp Simulator placeholder tileset
+
+These pictures are original. They were drawn by
+tools/gen_tileset.py. They are not from any other game,
+and they contain no copied game art.
+
+They are part of Megacorp Simulator and are covered by the
+MIT licence. Copyright (c) 2026 Robert Boettcher. See
+LICENSE at the repository root.
