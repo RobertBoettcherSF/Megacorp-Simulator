@@ -642,12 +642,6 @@ package body Megacorp.World.Campaign is
       Ada.Text_IO.Put_Line (File, "  ]");
       Ada.Text_IO.Put_Line (File, "}");
       Ada.Text_IO.Close (File);
-   exception
-      when others =>
-         if Ada.Text_IO.Is_Open (File) then
-            Ada.Text_IO.Close (File);
-         end if;
-         raise;
    end Write;
 
 end Megacorp.World.Campaign;

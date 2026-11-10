@@ -586,7 +586,127 @@ let campaignData = null;
 let campaignDay = 0;
 let showWorld = false;
 
+let wasmExports = null;
+let wasmLive = false;
+let wasmTimer = null;
+
+function readAscii(view, offset, length) {
+  let text = "";
+  for (let i = 0; i < length; i += 1) {
+    const code = view.getUint8(offset + i);
+    if (code === 0) {
+      break;
+    }
+    text += String.fromCharCode(code);
+  }
+  return text;
+}
+
+function hexByte(value) {
+  return value.toString(16).padStart(2, "0");
+}
+
+function readWasmWorld() {
+  const view = new DataView(wasmExports.memory.buffer);
+  let cursor = wasmExports.megacorp_state();
+  const day = view.getUint32(cursor, true);
+  cursor += 4;
+  const regionCount = view.getUint32(cursor, true);
+  cursor += 4;
+  const corpCount = view.getUint32(cursor, true);
+  cursor += 4;
+  const linkCount = view.getUint32(cursor, true);
+  cursor += 4;
+  cursor += 8;
+  const corporations = [];
+  for (let i = 0; i < corpCount; i += 1) {
+    const cash = view.getUint32(cursor, true);
+    cursor += 4;
+    const red = view.getUint8(cursor);
+    cursor += 1;
+    const green = view.getUint8(cursor);
+    cursor += 1;
+    const blue = view.getUint8(cursor);
+    cursor += 1;
+    const eliminated = view.getUint8(cursor) === 1;
+    cursor += 1;
+    const nameLength = view.getUint8(cursor);
+    cursor += 1;
+    const name = readAscii(view, cursor, nameLength);
+    cursor += 24;
+    corporations.push({
+      id: i + 1,
+      name,
+      colour: `#${hexByte(red)}${hexByte(green)}${hexByte(blue)}`,
+      cash,
+      eliminated
+    });
+  }
+  const regions = [];
+  for (let i = 0; i < regionCount; i += 1) {
+    const x = view.getUint16(cursor, true);
+    cursor += 2;
+    const y = view.getUint16(cursor, true);
+    cursor += 2;
+    const owner = view.getUint8(cursor);
+    cursor += 1;
+    const tax = view.getUint8(cursor);
+    cursor += 1;
+    const unrest = view.getUint8(cursor);
+    cursor += 1;
+    const defence = view.getUint8(cursor);
+    cursor += 1;
+    const tech = view.getUint8(cursor);
+    cursor += 1;
+    const population = view.getUint16(cursor, true);
+    cursor += 2;
+    const nameLength = view.getUint8(cursor);
+    cursor += 1;
+    const name = readAscii(view, cursor, nameLength);
+    cursor += 24;
+    regions.push({
+      id: i + 1,
+      name,
+      x,
+      y,
+      population,
+      tech,
+      tax,
+      unrest,
+      defence,
+      owner,
+      city: `region-${i + 1}.json`
+    });
+  }
+  const links = [];
+  for (let i = 0; i < linkCount; i += 1) {
+    const a = view.getUint16(cursor, true);
+    cursor += 2;
+    const b = view.getUint16(cursor, true);
+    cursor += 2;
+    links.push({ a, b });
+  }
+  return { day, corporations, regions, links };
+}
+
+function showWasmDay() {
+  const world = readWasmWorld();
+  worldData = world;
+  const cash = world.corporations
+    .map((corp) => `${corp.id}:${corp.cash}`)
+    .join(" ");
+  document.getElementById("day-label").textContent = String(world.day);
+  document.getElementById("day").value = String(Math.min(world.day, 365));
+  document.getElementById("path-status").textContent =
+    `Day ${world.day} cash ${cash}`;
+  document.getElementById("engine").textContent = "engine: wasm";
+  document.getElementById("seed-label").textContent = "world 42";
+}
+
 function ownerId(region, index) {
+  if (wasmLive) {
+    return region.owner;
+  }
   const frame = campaignData && campaignData.frames
     && campaignData.frames[campaignDay];
   if (frame && frame.owner && frame.owner[index] != null) {
@@ -1021,6 +1141,18 @@ async function main() {
       const slider = document.getElementById("day");
       slider.max = String(campaignData.days || 0);
       slider.addEventListener("input", () => {
+        if (wasmLive && wasmExports) {
+          const target = Number(slider.value);
+          wasmExports.megacorp_init(42);
+          if (target > 0) {
+            wasmExports.megacorp_step(target);
+          }
+          showWasmDay();
+          if (showWorld) {
+            draw();
+          }
+          return;
+        }
         campaignDay = Number(slider.value);
         document.getElementById("day-label").textContent =
           String(campaignDay);
@@ -1039,6 +1171,41 @@ async function main() {
     campaignData = null;
   }
   await loadFile(index.maps[select.selectedIndex].file);
+  try {
+    const response = await fetch("megacorp.wasm");
+    if (!response.ok) {
+      throw new Error(String(response.status));
+    }
+    const bytes = await response.arrayBuffer();
+    const mod = await WebAssembly.instantiate(bytes, {});
+    wasmExports = mod.instance.exports;
+    wasmExports.adainit();
+    wasmExports.megacorp_init(42);
+    wasmLive = true;
+    showWorld = true;
+    document.getElementById("world").textContent = "City";
+    document.getElementById("hover").textContent = "Hover a region.";
+    showWasmDay();
+    draw();
+    wasmTimer = setInterval(() => {
+      if (!wasmExports) {
+        return;
+      }
+      const view = new DataView(wasmExports.memory.buffer);
+      const day = view.getUint32(wasmExports.megacorp_state(), true);
+      if (day >= 120) {
+        wasmExports.megacorp_init(42);
+      } else {
+        wasmExports.megacorp_step(1);
+      }
+      showWasmDay();
+      if (showWorld) {
+        draw();
+      }
+    }, 700);
+  } catch (err) {
+    document.getElementById("engine").textContent = "engine: trace";
+  }
 }
 
 function showError(err) {

@@ -3,7 +3,7 @@
 A headless simulation written in Ada, with a thin browser page that
 draws what the Ada program has already exported.
 
-The current build is version 0.19.0. Build and test instructions are
+The current build is version 0.20.0. Build and test instructions are
 in [megacorp/README.md](megacorp/README.md). The design notes are in
 [docs/DESIGN.md](docs/DESIGN.md). The check page is
 [web/index.html](web/index.html).
