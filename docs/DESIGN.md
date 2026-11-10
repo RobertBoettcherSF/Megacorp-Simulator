@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.19.0, item 19
+
+`Megacorp.Save.Migrate` walks a format one version at a time. Each step is a pure function of the file text, with a precondition on the version it accepts and a postcondition that the result is the next version and its checksum matches. Version 2 adds a research total on each corporation, default 0, and a numeric generator algorithm. A version 1 file gains `algorithm 1` and a zero research field, then a new checksum. The loader logs `migrated save from version 1 to 2`. A version above 2 is refused with `wrong format version` before the checksum is considered.
+
+The `generator` line stays the program version that first wrote the file. The algorithm stamp is separate. Algorithm 1 is the world from 0.15.0. Algorithm 2 changes only the city-seed key, so the stamp can be told apart. New games stay on algorithm 1. Loading rebuilds the base world with the stamped algorithm. It does not re-roll unvisited regions. A log sealed to the version 1 bytes still replays. Golden copies of a seed-42 snapshot and its four-day log are in `megacorp/tests/`.
+
 ### 2026-11-10 — version 0.18.0, item 18
 
 `Megacorp.Save.Log` appends one checksummed line for each change since a snapshot. The file starts with `MGCD`, the format version, and the checksum of the snapshot it belongs to. A day line is `day none`, or `day tax` with the region and the rate. The other lines are a region row, a finished mission, a tile patch, a squad agent, or a re-rolled city seed. Loading is that snapshot plus a replay. After 32 lines, or when asked, the log is folded into a new snapshot. A torn final line is dropped and a warning is logged. A bad line earlier in the file is rejected.
@@ -286,6 +292,20 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Command.** `--log FILE` replays that log and appends the new days. The snapshot file stays at the last compact until `--compact`. Without `--log`, `--save` still writes the world after N days. The snapshot and the log share a directory, because both calls go through one virtual-FS root.
 
+### Item 19 — migration
+
+**One step, on the text.** A decoded record would have hidden the checksum and the header. `Step` takes a whole file whose version is one behind current, checks that checksum, and returns the next version with a new checksum. `To_Current` calls `Step` until the file is current. Today that is a single call, version 1 to version 2. A third version will be another function, not a change to this one. A version the program does not know is refused with `wrong format version` before the checksum, so a future file is not reported as corruption.
+
+**The version 2 field.** Each corporation stores research points. The default is 0, which is "research has not started". Item 25 can spend the field without another format bump for the first point. The squad was already in version 1, so it was not a new field. The migrated line is the old corporation line plus ` 0`.
+
+**Generator stamp.** Format version and generator algorithm are different numbers. The version 1 `generator` line is the program version that wrote the file (`0.18.0` on the golden snapshot). Migration keeps that string and adds `algorithm 1`. Algorithm 1 is the city and world formula from 0.15.0. Algorithm 2 mixes a constant into the city-seed key and changes nothing else, so a test can see which stamp was used. New games stay on algorithm 1. Moving the default to 2 would reshuffle every city the mission tests and the page already publish. Loading calls `Generate` with the stamp, then copies the saved fields back. An algorithm number above 2 is `unknown generator version`.
+
+**No silent re-roll.** A newer generator does not touch an old world at load, in any play mode. Re-rolling an unvisited region stays the explicit log record from item 18. Doing it automatically on migration would change a free-play map the player had not asked to change. Scenario and free play therefore take the same path here: rebuild with the stamp.
+
+**The old log.** The log format is not migrated. Its base line is the checksum of the version 1 snapshot. After migration the snapshot's own checksum is different, so replay also accepts the checksum of the version 1 projection of the same fields. A log sealed to a different world is still skipped.
+
+**Fixtures.** `megacorp/tests/v1-slot.mgc` is seed 42 at day 0, written by version 0.18.0. `v1-slot.log` is four `day none` lines sealed to that file. Loading them migrates the snapshot and replays to the same day-4 line as a continuous run.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -296,7 +316,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–18 (version 0.18.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–19 (version 0.19.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -676,7 +696,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 17. **Save format v1.** Done in 0.17.0. Magic, format version, checksum, master seed, world day, play mode, locked flag, mutable region and corporation fields, tile patches, and the player squad. Written through the virtual file system. Depends on: 15, 11. Try: `bin/megacorp --campaign 42 --days 10 --save slot.mgc`, then `--load slot.mgc --days 10`. Size: medium.
 18. **Delta log + mission-end snapshot.** Done in 0.18.0. Append-only checksummed lines since the snapshot: days and their inputs, region rows, finished missions, tile patches, squad changes, and re-rolls. A torn final line is dropped. Compact after 32 lines or on demand. A scenario refuses a re-roll. Depends on: 17. Try: `bin/megacorp --campaign 42 --days 0 --save slot.mgc --log slot.log`, then `--load slot.mgc --log slot.log --days 10`, then `--compact`. Size: small-medium.
-19. **Migration hooks.** Fake a v0 save and upgrade it; refuse a future version cleanly. Honour the play-mode re-roll rule from §7.6. Depends on: 17. Try: a fixture old save loads with a “migrated” note. Size: small.
+19. **Migration hooks.** Done in 0.19.0. One pure step from format version 1 to 2. Version 2 adds research points, default 0, and a generator algorithm stamp. A newer format is refused. A version 1 log still replays. Depends on: 17. Try: `bin/megacorp --campaign 42 --days 0 --load megacorp/tests/v1-slot.mgc --log megacorp/tests/v1-slot.log`. The note is `migrated save from version 1 to 2`. Size: small.
 
 ### Phase E — Browser front end, first playable mission
 

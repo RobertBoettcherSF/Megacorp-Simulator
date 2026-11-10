@@ -2,6 +2,8 @@
 --  Copyright (c) 2026 Robert Boettcher
 
 with Ada.Strings.Unbounded;
+with Megacorp.Host;
+with Megacorp.Save.Migrate;
 
 package body Megacorp.Save is
    use type Map.Terrain;
@@ -16,7 +18,6 @@ package body Megacorp.Save is
      return Ada.Strings.Unbounded.Unbounded_String
      renames Ada.Strings.Unbounded."&";
 
-   function Digest (Text : String) return RNG.Word;
    function Hex (Value : RNG.Word) return String;
    function From_Hex (Text : String) return RNG.Word;
    function Trim (Value : Integer) return String;
@@ -29,7 +30,14 @@ package body Megacorp.Save is
    function Terrain_Of (Code : Character) return Map.Terrain;
    function Bit (Flag : Boolean) return Character;
    function Flag (Code : Character) return Boolean;
-   function Encode (Snap : Snapshot) return String;
+   function Encode
+     (Snap : Snapshot;
+      Legacy : Boolean := False) return String;
+   function Wrap
+     (Version : Positive;
+      Payload : String) return String;
+   function Stamp_Image (Snap : Snapshot) return String;
+   procedure Set_Stamp (Snap : in out Snapshot; Text : String);
    function Decode (Payload : String) return Snapshot;
    function Field (Line : String; Index : Positive) return String;
    function Head (Text : String) return Character;
@@ -225,24 +233,58 @@ package body Megacorp.Save is
       return Text (Text'First);
    end Head;
 
-   function Encode (Snap : Snapshot) return String is
+   function Stamp_Image (Snap : Snapshot) return String is
+   begin
+      if Snap.Stamp_Len = 0 then
+         return Version;
+      end if;
+      return Snap.Stamp (1 .. Snap.Stamp_Len);
+   end Stamp_Image;
+
+   procedure Set_Stamp (Snap : in out Snapshot; Text : String) is
+   begin
+      if Text'Length = 0 or else Text'Length > Stamp_Max then
+         raise Save_Error with "not a Megacorp save";
+      end if;
+      Snap.Stamp := (others => ' ');
+      Snap.Stamp_Len := Text'Length;
+      Snap.Stamp (1 .. Text'Length) := Text;
+   end Set_Stamp;
+
+   function Encode
+     (Snap : Snapshot;
+      Legacy : Boolean := False) return String
+   is
       Text : Ada.Strings.Unbounded.Unbounded_String;
+      Corp : Ada.Strings.Unbounded.Unbounded_String;
    begin
       Text := Add (Text, "seed " & Trim_Word (Snap.Seed) & ASCII.LF);
       Text := Add (Text, "day " & Trim (Snap.Day) & ASCII.LF);
       Text := Add (Text, "mode " & Mode_Name (Snap.Play) & ASCII.LF);
       Text := Add (Text, "locked " & Bit (Snap.Locked) & ASCII.LF);
-      Text := Add (Text, "generator " & Version & ASCII.LF);
+      Text := Add
+        (Text, "generator " & Stamp_Image (Snap) & ASCII.LF);
+      if not Legacy then
+         Text := Add
+           (Text, "algorithm " & Trim (Snap.Algorithm) & ASCII.LF);
+      end if;
       Text := Add (Text, "corps " & Trim (Snap.Corps) & ASCII.LF);
       for I in 1 .. Snap.Corps loop
-         Text := Add
-           (Text,
+         Corp := Add
+           (Corp,
             "c " & Trim (I)
             & " " & Trim (Snap.Company (I).Cash)
             & " " & Trim (Snap.Company (I).Earned)
             & " " & Trim (Snap.Company (I).Spent)
-            & " " & Bit (Snap.Company (I).Eliminated)
-            & ASCII.LF);
+            & " " & Bit (Snap.Company (I).Eliminated));
+         if not Legacy then
+            Corp := Add
+              (Corp, " " & Trim (Snap.Company (I).Research));
+         end if;
+         Text := Add
+           (Text,
+            Ada.Strings.Unbounded.To_String (Corp) & ASCII.LF);
+         Corp := Ada.Strings.Unbounded.Null_Unbounded_String;
       end loop;
       Text := Add (Text, "regions " & Trim (Snap.Regions) & ASCII.LF);
       for I in 1 .. Snap.Regions loop
@@ -303,13 +345,25 @@ package body Megacorp.Save is
       return Ada.Strings.Unbounded.To_String (Text);
    end Encode;
 
-   function Image (Snap : Snapshot) return String is
-      Payload_Text : constant String := Encode (Snap);
+   function Wrap
+     (Version : Positive;
+      Payload : String) return String
+   is
    begin
-      return "MGC1" & ' ' & Trim (Format_Version) & ASCII.LF
-        & Hex (Digest (Payload_Text)) & ASCII.LF
-        & Payload_Text;
+      return "MGC1" & ' ' & Trim (Version) & ASCII.LF
+        & Hex (Digest (Payload)) & ASCII.LF
+        & Payload;
+   end Wrap;
+
+   function Image (Snap : Snapshot) return String is
+   begin
+      return Wrap (Format_Version, Encode (Snap, False));
    end Image;
+
+   function Legacy_Seal (Snap : Snapshot) return RNG.Word is
+   begin
+      return Digest (Wrap (1, Encode (Snap, True)));
+   end Legacy_Seal;
 
    function Bytes (Snap : Snapshot) return Natural is
    begin
@@ -357,17 +411,43 @@ package body Megacorp.Save is
       Snap.Play := Mode_Of (Field (Line_Of (Payload, Cursor), 2));
       Cursor := 4;
       Snap.Locked := Flag (Head (Field (Line_Of (Payload, Cursor), 2)));
+      Cursor := 5;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor);
+      begin
+         if Field (Mark, 1) /= "generator" then
+            raise Save_Error with "not a Megacorp save";
+         end if;
+         Set_Stamp (Snap, Field (Mark, 2));
+      end;
       Cursor := 6;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor);
+      begin
+         if Field (Mark, 1) /= "algorithm" then
+            raise Save_Error with "not a Megacorp save";
+         end if;
+         Snap.Algorithm := Positive'Value (Field (Mark, 2));
+         if Snap.Algorithm > World.Gen.Max_Algorithm then
+            raise Save_Error with "unknown generator version";
+         end if;
+      end;
+      Cursor := 7;
       Snap.Corps := Positive'Value (Field (Line_Of (Payload, Cursor), 2));
       for I in 1 .. Snap.Corps loop
          Cursor := Cursor + 1;
          declare
             Row : constant String := Line_Of (Payload, Cursor);
+            Study : constant String := Field (Row, 7);
          begin
             Snap.Company (I).Cash := Natural'Value (Field (Row, 3));
             Snap.Company (I).Earned := Natural'Value (Field (Row, 4));
             Snap.Company (I).Spent := Natural'Value (Field (Row, 5));
             Snap.Company (I).Eliminated := Flag (Head (Field (Row, 6)));
+            if Study'Length = 0 then
+               raise Save_Error with "not a Megacorp save";
+            end if;
+            Snap.Company (I).Research := Natural'Value (Study);
          end;
       end loop;
       Cursor := Cursor + 1;
@@ -464,12 +544,16 @@ package body Megacorp.Save is
    function Capture
      (Item : World.Atlas;
       Day : Natural;
-      Play : Parameters.Play_Mode) return Snapshot
+      Play : Parameters.Play_Mode;
+      Algorithm : Positive := World.Gen.Current_Algorithm)
+      return Snapshot
    is
       Snap : Snapshot;
    begin
       Snap.Play := Play;
       Snap.Locked := Play = Parameters.Scenario;
+      Snap.Algorithm := Algorithm;
+      Set_Stamp (Snap, Version);
       Snap.Squad := Squad_Size;
       for I in 1 .. Squad_Size loop
          Snap.Agent (I).Health := 100;
@@ -504,10 +588,8 @@ package body Megacorp.Save is
          Snap.Area (I).Tech := Item.Area (I).Tech;
          declare
             Expected : constant RNG.Word :=
-              RNG.Derive
-                (Item.Seed,
-                 RNG.Domain_Key
-                   (RNG.Region, RNG.Stream_Index (I)));
+              World.Gen.City_Of
+                (Item.Seed, Snap.Algorithm, I);
          begin
             if Item.Area (I).City = Expected then
                Snap.Area (I).Has_City := False;
@@ -642,7 +724,10 @@ package body Megacorp.Save is
          when Constraint_Error =>
             raise Save_Error with "not a Megacorp save";
       end;
-      if Listed /= Format_Version then
+      if Listed < 1 then
+         raise Save_Error with "not a Megacorp save";
+      end if;
+      if Listed > Format_Version then
          raise Save_Error with "wrong format version";
       end if;
       Split := Mark + 1;
@@ -657,18 +742,52 @@ package body Megacorp.Save is
            From_Hex (Text (Mark + 1 .. Split - 1));
          Payload_Text : constant String :=
            Text (Split + 1 .. Text'Last);
+         Current : constant String :=
+           (if Listed = Format_Version then Text
+            else Migrate.To_Current (Text));
+         Body_At : Natural := Current'First;
+         Seen : Natural := 0;
       begin
          if Digest (Payload_Text) /= Sum then
             raise Save_Error with "checksum mismatch";
          end if;
+         if Listed < Format_Version then
+            Host.Log
+              (Host.Info,
+               Migrate.Note (Listed, Format_Version));
+         end if;
+         for I in Current'Range loop
+            if Current (I) = ASCII.LF then
+               Seen := Seen + 1;
+               if Seen = 2 then
+                  Body_At := I + 1;
+                  exit;
+               end if;
+            end if;
+         end loop;
          begin
-            return Decode (Payload_Text);
+            return Decode (Current (Body_At .. Current'Last));
          exception
             when Constraint_Error =>
                raise Save_Error with "not a Megacorp save";
          end;
       end;
    end Load;
+
+   function Rebuild
+     (Snap : Snapshot;
+      Size : Parameters.Generator_Parameters) return World.Atlas
+   is
+      Result : World.Atlas;
+   begin
+      if Snap.Algorithm > World.Gen.Max_Algorithm then
+         raise Save_Error with "unknown generator version";
+      end if;
+      Result := World.Gen.Generate
+        (Snap.Seed, Size, Snap.Algorithm);
+      Restore (Snap, Result);
+      return Result;
+   end Rebuild;
 
    function Same (Left, Right : Snapshot) return Boolean is
    begin
@@ -681,6 +800,11 @@ package body Megacorp.Save is
         or else Left.Patches /= Right.Patches
         or else Left.Squad /= Right.Squad
         or else Left.Missions /= Right.Missions
+        or else Left.Algorithm /= Right.Algorithm
+        or else Left.Stamp_Len /= Right.Stamp_Len
+        or else (Left.Stamp_Len > 0
+                 and then Left.Stamp (1 .. Left.Stamp_Len)
+                   /= Right.Stamp (1 .. Left.Stamp_Len))
       then
          return False;
       end if;
@@ -690,6 +814,8 @@ package body Megacorp.Save is
            or else Left.Company (I).Spent /= Right.Company (I).Spent
            or else Left.Company (I).Eliminated
              /= Right.Company (I).Eliminated
+           or else Left.Company (I).Research
+             /= Right.Company (I).Research
          then
             return False;
          end if;

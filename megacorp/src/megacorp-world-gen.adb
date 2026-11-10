@@ -250,9 +250,24 @@ package body Megacorp.World.Gen is
       return True;
    end Distinct_Homes;
 
+   function City_Of
+     (Seed : RNG.Word;
+      Algorithm : Positive;
+      Region : Positive) return RNG.Word
+   is
+      Key : RNG.Word :=
+        RNG.Domain_Key (RNG.Region, RNG.Stream_Index (Region));
+   begin
+      if Algorithm /= 1 then
+         Key := Key xor 16#19_0000_0019#;
+      end if;
+      return RNG.Derive (Seed, Key);
+   end City_Of;
+
    function Generate
      (Seed : RNG.Word;
-      Size : Parameters.Generator_Parameters) return Atlas
+      Size : Parameters.Generator_Parameters;
+      Algorithm : Positive := Current_Algorithm) return Atlas
    is
       Result : Atlas;
       World_G : RNG.Generator :=
@@ -290,10 +305,8 @@ package body Megacorp.World.Gen is
             Result.Area (I).Tech := 15 + RNG.Pick (Region_G, 0, 70);
             Result.Area (I).Tax := 5 + RNG.Pick (Region_G, 0, 30);
             Result.Area (I).Unrest := RNG.Pick (Region_G, 0, 55);
-            Result.Area (I).City := RNG.Derive
-              (Seed,
-               RNG.Domain_Key
-                 (RNG.Region, RNG.Stream_Index (I)));
+            Result.Area (I).City :=
+              City_Of (Seed, Algorithm, I);
             Result.Area (I).X :=
               Col * 100 + RNG.Pick (Region_G, 0, 18);
             Result.Area (I).Y :=

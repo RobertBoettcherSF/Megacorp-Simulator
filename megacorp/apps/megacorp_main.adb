@@ -195,7 +195,7 @@ begin
                if Snap.Seed /= Seed then
                   raise Megacorp.Save.Save_Error with "seed mismatch";
                end if;
-               Megacorp.Save.Restore (Snap, Globe);
+               Globe := Megacorp.Save.Rebuild (Snap, P);
                Start := Snap.Day;
             else
                Snap := Megacorp.Save.Capture
@@ -237,7 +237,7 @@ begin
                      raise Megacorp.Save.Save_Error
                        with "seed mismatch";
                   end if;
-                  Megacorp.Save.Restore (Snap, Globe);
+                  Globe := Megacorp.Save.Rebuild (Snap, P);
                end Adopt;
                procedure Fold is
                begin

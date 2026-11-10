@@ -1,8 +1,8 @@
-# Megacorp Simulator 0.18.0
+# Megacorp Simulator 0.19.0
 
-Headless Ada core for Megacorp Simulator. Version 0.18.0 adds an
-append-only delta log (design item 18). Item 12, the C++ comparison,
-stays skipped, so there is no 0.12.0.
+Headless Ada core for Megacorp Simulator. Version 0.19.0 adds save
+migration from format version 1 to 2 (design item 19). Item 12, the
+C++ comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -46,7 +46,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.18.0.zip` for
+It also writes `dist/megacorp_v0.19.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -81,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.18.0 contains
+## What 0.19.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -128,7 +128,10 @@ and `--load FILE` continues from a snapshot. The file is format
 version 1: magic, checksum, seed, day, play mode, and only the
 fields play can change. Names and an untouched city are rebuilt.
 `--log FILE` appends each later day, and `--compact` folds that
-log back into the snapshot. A torn final line is dropped.
+log back into the snapshot. A torn final line is dropped. A format
+version 1 file migrates to version 2 on load. Version 2 adds a
+research total per corporation, default 0. The generator algorithm
+is stamped, and an old world is rebuilt with that stamp.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads
