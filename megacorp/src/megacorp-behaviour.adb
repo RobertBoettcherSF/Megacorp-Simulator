@@ -638,9 +638,27 @@ package body Megacorp.Behaviour is
       Bang   : Map.Point;
       Heard  : constant Boolean := Hear_Shot (Bodies, Bang);
    begin
-      for Wanted in Peds.Ped_Id loop
+      declare
+         type Rank is array (Positive range <>) of Positive;
+         Order : Rank (Group'Range);
+         Swap  : Positive;
+      begin
          for I in Group'Range loop
-            if Ident (Group (I)) = Wanted then
+            Order (I) := I;
+         end loop;
+         for I in Group'Range loop
+            for J in I + 1 .. Group'Last loop
+               if Ident (Group (Order (J))) < Ident (Group (Order (I))) then
+                  Swap := Order (I);
+                  Order (I) := Order (J);
+                  Order (J) := Swap;
+               end if;
+            end loop;
+         end loop;
+         for K in Group'Range loop
+            declare
+               I : constant Positive := Order (K);
+            begin
                case Group (I).Job is
                   when Civilian =>
                      Do_Civilian
@@ -654,9 +672,9 @@ package body Megacorp.Behaviour is
                   when Agent =>
                      Do_Agent (Group, Bodies, I);
                end case;
-            end if;
+            end;
          end loop;
-      end loop;
+      end;
    end React;
 
    function Observe (Person : Mind) return Frame is

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.14.0</title>
+  <title>Megacorp Simulator 0.15.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -77,7 +77,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.14.0</span>
+    <p class="meta">version <span id="version">0.15.0</span>
       · seed <span id="seed-label">…</span></p>
   </header>
   <div class="controls">
@@ -93,6 +93,7 @@
     <span>Tick <span id="tick">0</span></span>
     <span id="queue">No action queue on this trace.</span>
     <button id="view" type="button">Flat view</button>
+    <button id="world" type="button">World map</button>
     <span>
       <button id="zoom-out" type="button">−</button>
       <span id="zoom-label">6 px</span>
@@ -114,7 +115,8 @@
     brackets is that ped's mood. The mission trace lists each
     objective as open or done. A click snaps to the nearest
     prepared start or goal. The
-    layout is the seeded test map, not the later city-block generator.</p>
+    layout is a generated city. World map shows who owns each region;
+    a click there opens that region's city.</p>
   <script src="js/map.js"></script>
 </body>
 </html>

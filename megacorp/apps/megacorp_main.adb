@@ -10,6 +10,7 @@ with Megacorp.Mission;
 with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.RNG;
+with Megacorp.World.Gen;
 
 procedure Megacorp_Main is
    package Params renames Megacorp.Parameters;
@@ -60,6 +61,29 @@ begin
         (Ada.Command_Line.Argument (2), Megacorp.Version);
       Ada.Text_IO.Put_Line
         ("exported maps to " & Ada.Command_Line.Argument (2));
+   elsif Ada.Command_Line.Argument_Count in 1 .. 2
+     and then Ada.Command_Line.Argument (1) = "--world"
+   then
+      declare
+         Seed : Megacorp.RNG.Word := 42;
+         Globe : Megacorp.World.Atlas;
+      begin
+         if Ada.Command_Line.Argument_Count = 2 then
+            Seed := Megacorp.RNG.Word'Value
+              (Ada.Command_Line.Argument (2));
+         end if;
+         Globe := Megacorp.World.Gen.Generate (Seed, P);
+         Megacorp.World.Gen.Put
+           (Ada.Text_IO.Standard_Output, Globe);
+      exception
+         when Constraint_Error =>
+            Ada.Text_IO.Put_Line
+              (Ada.Text_IO.Current_Error,
+               "usage: megacorp [--export DIR]"
+               & " [--world [SEED]]"
+               & " [--mission SEED [--ticks N]]");
+            Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
+      end;
    elsif Ada.Command_Line.Argument_Count in 2 .. 4
      and then Ada.Command_Line.Argument (1) = "--mission"
    then
@@ -80,6 +104,7 @@ begin
             Ada.Text_IO.Put_Line
               (Ada.Text_IO.Current_Error,
                "usage: megacorp [--export DIR]"
+               & " [--world [SEED]]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
             return;
@@ -96,6 +121,7 @@ begin
             Ada.Text_IO.Put_Line
               (Ada.Text_IO.Current_Error,
                "usage: megacorp [--export DIR]"
+               & " [--world [SEED]]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
       end;
@@ -108,6 +134,7 @@ begin
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Current_Error,
          "usage: megacorp [--export DIR]"
+         & " [--world [SEED]]"
          & " [--mission SEED [--ticks N]]");
       Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
    end if;

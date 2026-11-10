@@ -1131,15 +1131,31 @@ package body Megacorp.Actions is
       for I in Group'Range loop
          Prepare (Group, I, Bodies, Fleet, M, Foot, Walk_Blocks);
       end loop;
-      for Wanted in Vehicles.Vehicle_Id loop
+      declare
+         type Rank is array (Positive range <>) of Positive;
+         Order : Rank (Fleet'Range);
+         Swap  : Positive;
+      begin
          for I in Fleet'Range loop
-            if Vehicles.Ident (Fleet (I)) = Wanted
-              and then Driving (Group, Fleet, I)
-            then
-               Vehicles.Advance (Fleet, I, M, Foot);
+            Order (I) := I;
+         end loop;
+         for I in Fleet'Range loop
+            for J in I + 1 .. Fleet'Last loop
+               if Vehicles.Ident (Fleet (Order (J)))
+                 < Vehicles.Ident (Fleet (Order (I)))
+               then
+                  Swap := Order (I);
+                  Order (I) := Order (J);
+                  Order (J) := Swap;
+               end if;
+            end loop;
+         end loop;
+         for K in Fleet'Range loop
+            if Driving (Group, Fleet, Order (K)) then
+               Vehicles.Advance (Fleet, Order (K), M, Foot);
             end if;
          end loop;
-      end loop;
+      end;
       Walk_Blocks.Clear;
       Vehicles.Add_Blocks (Fleet, 0, True, Walk_Blocks);
       for I in Group'Range loop

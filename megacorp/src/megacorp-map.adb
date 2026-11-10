@@ -15,6 +15,8 @@ with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
 with Megacorp.Path;
 with Megacorp.Peds;
+with Megacorp.World;
+with Megacorp.World.Gen;
 
 package body Megacorp.Map is
    package Act renames Megacorp.Actions;
@@ -22,6 +24,7 @@ package body Megacorp.Map is
    package Disk renames Megacorp.Data.Virtual_FS.Native;
    use type Mission.Status;
    use type Path.Status;
+   use type Mission.Gen.Duty;
    use type Peds.State_Kind;
 
    --  Below this edge the test layout is open ground only.
@@ -118,6 +121,12 @@ package body Megacorp.Map is
       Version : String;
       M : City;
       Tiles : Placeholder.Tileset);
+   procedure Write_Terrain
+     (Path : String;
+      Version : String;
+      M : City;
+      Tiles : Placeholder.Tileset;
+      Title : String);
    procedure Write_Index
      (Path : String; Version : String);
    function Facing_Token (Dir : Eight_Way) return String;
@@ -539,6 +548,60 @@ package body Megacorp.Map is
          end if;
          raise;
    end Write_Map_File;
+
+   procedure Write_Terrain
+     (Path : String;
+      Version : String;
+      M : City;
+      Tiles : Placeholder.Tileset;
+      Title : String)
+   is
+      File : Ada.Text_IO.File_Type;
+   begin
+      Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Path);
+      Ada.Text_IO.Put_Line (File, "{");
+      Ada.Text_IO.Put_Line
+        (File, "  ""version"": """ & Version & """,");
+      Ada.Text_IO.Put_Line
+        (File,
+         "  ""seed"": " & Trim (RNG.Word'Image (Layout_Seed (M)))
+         & ",");
+      Ada.Text_IO.Put_Line
+        (File, "  ""label"": """ & Title & """,");
+      Ada.Text_IO.Put_Line
+        (File, "  ""width"": " & Trim (Integer'Image (M.Width)) & ",");
+      Ada.Text_IO.Put_Line
+        (File,
+         "  ""height"": " & Trim (Integer'Image (M.Height)) & ",");
+      Ada.Text_IO.Put_Line (File, "  ""legend"": {");
+      Ada.Text_IO.Put_Line (File, "    ""."": ""open"",");
+      Ada.Text_IO.Put_Line (File, "    ""+"": ""road"",");
+      Ada.Text_IO.Put_Line (File, "    ""="": ""pavement"",");
+      Ada.Text_IO.Put_Line (File, "    ""B"": ""building"",");
+      Ada.Text_IO.Put_Line (File, "    ""~"": ""water""");
+      Ada.Text_IO.Put_Line (File, "  },");
+      Ada.Text_IO.Put_Line (File, "  ""rows"": [");
+      for Y in 1 .. M.Height loop
+         Ada.Text_IO.Put
+           (File, "    """ & Row_Image (M, Y, Tiles) & """");
+         if Y < M.Height then
+            Ada.Text_IO.Put_Line (File, ",");
+         else
+            Ada.Text_IO.New_Line (File);
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "  ],");
+      Ada.Text_IO.Put_Line (File, "  ""paths"": [],");
+      Ada.Text_IO.Put_Line (File, "  ""motion"": []");
+      Ada.Text_IO.Put_Line (File, "}");
+      Ada.Text_IO.Close (File);
+   exception
+      when others =>
+         if Ada.Text_IO.Is_Open (File) then
+            Ada.Text_IO.Close (File);
+         end if;
+         raise;
+   end Write_Terrain;
 
    procedure Write_Index (Path : String; Version : String) is
       File : Ada.Text_IO.File_Type;
@@ -1380,8 +1443,10 @@ package body Megacorp.Map is
         Mission.Gen.Build (M, Layout_Seed (M));
       Trace : constant Mission.Trace :=
         Mission.Gen.Solve (M, Layout_Seed (M));
-      Seen : array (1 .. 8) of Natural := (others => 0);
-      Count : array (1 .. 8) of Natural := (others => 0);
+      Seen : array (1 .. Mission.Gen.Max_People) of Natural :=
+        (others => 0);
+      Count : array (1 .. Mission.Gen.Max_People) of Natural :=
+        (others => 0);
 
       procedure Put_Name (Text : String; Last : Boolean);
       procedure Put_Car
@@ -1392,7 +1457,8 @@ package body Megacorp.Map is
          Moving : Boolean;
          Health : Positive;
          Last : Boolean);
-      function Driver (At_Tick : Natural) return Behaviour.Frame;
+      function Rider
+        (Who : Positive; At_Tick : Natural) return Behaviour.Frame;
 
       procedure Put_Name (Text : String; Last : Boolean) is
       begin
@@ -1452,22 +1518,24 @@ package body Megacorp.Map is
          end if;
       end Put_Car;
 
-      function Driver (At_Tick : Natural) return Behaviour.Frame is
+      function Rider
+        (Who : Positive; At_Tick : Natural) return Behaviour.Frame
+      is
          Blank : Behaviour.Frame;
       begin
          for I in Trace.Frames.First_Index .. Trace.Frames.Last_Index loop
-            if Trace.Frames (I).Ident = 6
+            if Integer (Trace.Frames (I).Ident) = Who
               and then Trace.Frames (I).Tick = At_Tick
             then
                return Trace.Frames (I);
             end if;
          end loop;
          return Blank;
-      end Driver;
+      end Rider;
    begin
       pragma Assert (Trace.Outcome.Outcome = Mission.Won);
       for I in Trace.Frames.First_Index .. Trace.Frames.Last_Index loop
-         if Integer (Trace.Frames (I).Ident) in 1 .. 8 then
+         if Integer (Trace.Frames (I).Ident) in 1 .. Plan.People then
             Count (Integer (Trace.Frames (I).Ident)) :=
               Count (Integer (Trace.Frames (I).Ident)) + 1;
          end if;
@@ -1536,7 +1604,7 @@ package body Megacorp.Map is
       end loop;
       Ada.Text_IO.Put_Line (File, "      ],");
       Ada.Text_IO.Put_Line (File, "      ""peds"": [");
-      for Who in 1 .. 8 loop
+      for Who in 1 .. Plan.People loop
          Ada.Text_IO.Put_Line (File, "      {");
          Ada.Text_IO.Put (File, "        ""id"": ");
          Ada.Text_IO.Put_Line (File, Trim (Integer'Image (Who)) & ",");
@@ -1565,7 +1633,7 @@ package body Megacorp.Map is
             end if;
          end loop;
          Ada.Text_IO.Put_Line (File, "        ]");
-         if Who = 8 then
+         if Who = Plan.People then
             Ada.Text_IO.Put_Line (File, "      }");
          else
             Ada.Text_IO.Put_Line (File, "      },");
@@ -1573,60 +1641,76 @@ package body Megacorp.Map is
       end loop;
       Ada.Text_IO.Put_Line (File, "      ],");
       Ada.Text_IO.Put_Line (File, "      ""vehicles"": [");
-      Ada.Text_IO.Put_Line (File, "      {");
-      Ada.Text_IO.Put_Line (File, "        ""id"": 1,");
-      Ada.Text_IO.Put_Line (File, "        ""kind"": ""car"",");
-      Ada.Text_IO.Put_Line (File, "        ""frames"": [");
-      Put_Car
-        (0, Plan.Park_A.X, Plan.Park_A.Y, 0,
-         East, False, Vehicles.Car_Health, True);
-      Ada.Text_IO.Put_Line (File, "        ]");
-      Ada.Text_IO.Put_Line (File, "      },");
-      Ada.Text_IO.Put_Line (File, "      {");
-      Ada.Text_IO.Put_Line (File, "        ""id"": 2,");
-      Ada.Text_IO.Put_Line (File, "        ""kind"": ""van"",");
-      Ada.Text_IO.Put_Line (File, "        ""frames"": [");
-      Put_Car
-        (0, Plan.Park_B.X, Plan.Park_B.Y, 0,
-         East, False, Vehicles.Van_Health, True);
-      Ada.Text_IO.Put_Line (File, "        ]");
-      Ada.Text_IO.Put_Line (File, "      },");
-      Ada.Text_IO.Put_Line (File, "      {");
-      Ada.Text_IO.Put_Line (File, "        ""id"": 3,");
-      Ada.Text_IO.Put_Line (File, "        ""kind"": ""car"",");
-      Ada.Text_IO.Put_Line (File, "        ""frames"": [");
-      declare
-         Last_Tick : constant Natural := Trace.Outcome.Tick;
-         Seen_Ride : Boolean := False;
-         X : Positive := Plan.Car.X;
-         Y : Positive := Plan.Car.Y;
-         Step : Natural := 0;
-         Dir : Eight_Way := East;
-         Shot : Behaviour.Frame;
-      begin
-         if Plan.Car_Goal.Y > Plan.Car.Y then
-            Dir := South;
-         elsif Plan.Car_Goal.X < Plan.Car.X then
-            Dir := West;
-         elsif Plan.Car_Goal.Y < Plan.Car.Y then
-            Dir := North;
-         end if;
-         for At_Tick in 0 .. Last_Tick loop
-            Shot := Driver (At_Tick);
-            if Shot.State = Peds.Riding then
-               Seen_Ride := True;
-               X := Shot.X;
-               Y := Shot.Y;
-               Step := Shot.Along;
-               Dir := Shot.Facing;
+      for Slot in 1 .. Plan.Motors loop
+         declare
+            Rig : constant Mission.Gen.Motor := Plan.Motor (Slot);
+            Health : Positive := Vehicles.Car_Health;
+            Pilot : Natural := 0;
+         begin
+            if Rig.Van then
+               Health := Vehicles.Van_Health;
             end if;
-            Put_Car
-              (At_Tick, X, Y, Step, Dir, Seen_Ride,
-               Vehicles.Car_Health, At_Tick = Last_Tick);
-         end loop;
-      end;
-      Ada.Text_IO.Put_Line (File, "        ]");
-      Ada.Text_IO.Put_Line (File, "      }");
+            for I in 1 .. Plan.People loop
+               if Plan.Seat (I).Work = Mission.Gen.Driver
+                 and then Plan.Seat (I).Motor = Slot
+               then
+                  Pilot := I;
+               end if;
+            end loop;
+            Ada.Text_IO.Put_Line (File, "      {");
+            Ada.Text_IO.Put (File, "        ""id"": ");
+            Ada.Text_IO.Put_Line
+              (File, Trim (Integer'Image (Slot)) & ",");
+            Ada.Text_IO.Put (File, "        ""kind"": """);
+            if Rig.Van then
+               Ada.Text_IO.Put_Line (File, "van"",");
+            else
+               Ada.Text_IO.Put_Line (File, "car"",");
+            end if;
+            Ada.Text_IO.Put_Line (File, "        ""frames"": [");
+            if not Rig.Moves or else Pilot = 0 then
+               Put_Car
+                 (0, Rig.Spot.X, Rig.Spot.Y, 0, East, False, Health, True);
+            else
+               declare
+                  Last_Tick : constant Natural := Trace.Outcome.Tick;
+                  Seen_Ride : Boolean := False;
+                  X : Positive := Rig.Spot.X;
+                  Y : Positive := Rig.Spot.Y;
+                  Step : Natural := 0;
+                  Dir : Eight_Way := East;
+                  Shot : Behaviour.Frame;
+               begin
+                  if Rig.Aim.Y > Rig.Spot.Y then
+                     Dir := South;
+                  elsif Rig.Aim.X < Rig.Spot.X then
+                     Dir := West;
+                  elsif Rig.Aim.Y < Rig.Spot.Y then
+                     Dir := North;
+                  end if;
+                  for At_Tick in 0 .. Last_Tick loop
+                     Shot := Rider (Pilot, At_Tick);
+                     if Shot.State = Peds.Riding then
+                        Seen_Ride := True;
+                        X := Shot.X;
+                        Y := Shot.Y;
+                        Step := Shot.Along;
+                        Dir := Shot.Facing;
+                     end if;
+                     Put_Car
+                       (At_Tick, X, Y, Step, Dir, Seen_Ride, Health,
+                        At_Tick = Last_Tick);
+                  end loop;
+               end;
+            end if;
+            Ada.Text_IO.Put_Line (File, "        ]");
+            if Slot = Plan.Motors then
+               Ada.Text_IO.Put_Line (File, "      }");
+            else
+               Ada.Text_IO.Put_Line (File, "      },");
+            end if;
+         end;
+      end loop;
       Ada.Text_IO.Put_Line (File, "      ]");
       Ada.Text_IO.Put_Line (File, "    }");
    end Write_Generated;
@@ -1932,6 +2016,26 @@ package body Megacorp.Map is
       end loop;
       Write_Encounter
         (Folder & "/encounter.json", Version, Tiles);
+      declare
+         Globe : constant World.Atlas :=
+           World.Gen.Generate (42, Parameters.Defaults);
+      begin
+         World.Gen.Write (Folder & "/world.json", Globe, Version);
+         for I in 1 .. Globe.Regions loop
+            declare
+               Region_City : constant City :=
+                 Gen.Generate (Globe.Area (I).City, Parameters.Defaults);
+            begin
+               Write_Terrain
+                 (Folder & "/region-" & Trim (Integer'Image (I))
+                  & ".json",
+                  Version,
+                  Region_City,
+                  Tiles,
+                  World.Image (Globe.Area (I).Title));
+            end;
+         end loop;
+      end;
       Write_Index (Folder & "/index.json", Version);
    end Export_Maps;
 

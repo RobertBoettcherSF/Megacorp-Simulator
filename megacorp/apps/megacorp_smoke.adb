@@ -12,6 +12,7 @@ with Megacorp.Mission;
 with Megacorp.Mission.Gen;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
+with Megacorp.World.Gen;
 with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
 with Megacorp.Host;
@@ -45,9 +46,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.14.0"
+     (Megacorp.Version = "0.15.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.14.0");
+      "version 0.15.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -468,6 +469,28 @@ begin
          and then Gen.Reachable (City, First)
          and then Gen.Car_Moved (City, 42),
          "population and recipe repeat");
+   end;
+
+   declare
+      package Globe renames Megacorp.World.Gen;
+      Home : constant Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Again : constant Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Other : constant Megacorp.World.Atlas :=
+        Globe.Generate (1, Defaults);
+   begin
+      Smoke_Check.Expect
+        (Home.Regions = 40
+         and then Home.Corps = 4
+         and then Home.Links > 0
+         and then Globe.Connected (Home)
+         and then Globe.Distinct_Homes (Home),
+         "world has 40 linked regions and 4 corporations");
+      Smoke_Check.Expect
+        (Globe.Same (Home, Again)
+         and then not Globe.Same (Home, Other),
+         "world follows the seed");
    end;
 
    declare
