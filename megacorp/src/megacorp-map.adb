@@ -5,6 +5,7 @@ with Ada.Directories;
 with Ada.Text_IO;
 with Megacorp.Actions;
 with Megacorp.Behaviour;
+with Megacorp.Mission;
 with Megacorp.Shots;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
@@ -17,6 +18,7 @@ package body Megacorp.Map is
    package Act renames Megacorp.Actions;
    package Placeholder renames Megacorp.Assets.Placeholder;
    package Disk renames Megacorp.Data.Virtual_FS.Native;
+   use type Mission.Status;
    use type Path.Status;
 
    --  Below this edge the test layout is open ground only.
@@ -932,7 +934,11 @@ package body Megacorp.Map is
    procedure Write_Mood_Frame
      (File : Ada.Text_IO.File_Type;
       Item : Behaviour.Frame;
-      Last_Item : Boolean);
+      Last_Item : Boolean;
+      Item_Here : Boolean := False);
+   function Goal_Here
+     (Rows : Mission.Goal_Lists.Vector; At_Tick : Natural) return Boolean;
+   procedure Write_Mission (File : Ada.Text_IO.File_Type; M : City);
    procedure Write_Mood_Ped
      (File : Ada.Text_IO.File_Type;
       Trace : Behaviour.Frame_Lists.Vector;
@@ -1119,7 +1125,8 @@ package body Megacorp.Map is
    procedure Write_Mood_Frame
      (File : Ada.Text_IO.File_Type;
       Item : Behaviour.Frame;
-      Last_Item : Boolean)
+      Last_Item : Boolean;
+      Item_Here : Boolean := False)
    is
    begin
       Ada.Text_IO.Put (File, "          {""t"":");
@@ -1147,6 +1154,12 @@ package body Megacorp.Map is
       Ada.Text_IO.Put (File, Trim (Integer'Image (Item.Ammo)));
       Ada.Text_IO.Put (File, ",""alive"":");
       if Item.Alive then
+         Ada.Text_IO.Put (File, "true");
+      else
+         Ada.Text_IO.Put (File, "false");
+      end if;
+      Ada.Text_IO.Put (File, ",""item_present"":");
+      if Item_Here then
          Ada.Text_IO.Put (File, "true");
       else
          Ada.Text_IO.Put (File, "false");
@@ -1231,8 +1244,132 @@ package body Megacorp.Map is
       Write_Mood_Ped (File, Trace, 6, False);
       Write_Mood_Ped (File, Trace, 7, True);
       Ada.Text_IO.Put_Line (File, "      ]");
-      Ada.Text_IO.Put_Line (File, "    }");
+      Ada.Text_IO.Put_Line (File, "    },");
    end Write_Behaviour;
+
+   function Goal_Here
+     (Rows : Mission.Goal_Lists.Vector; At_Tick : Natural) return Boolean
+   is
+   begin
+      for I in Rows.First_Index .. Rows.Last_Index loop
+         if Rows (I).Tick = At_Tick then
+            return Rows (I).Item_Here;
+         end if;
+      end loop;
+      return False;
+   end Goal_Here;
+
+   procedure Write_Mission (File : Ada.Text_IO.File_Type; M : City) is
+      Plan : constant Mission.Fixture_Plan := Mission.Fixture_Of (M);
+      Trace : constant Mission.Trace :=
+        Mission.Demonstration (M, Layout_Seed (M), 200);
+      Seen : array (1 .. 3) of Natural := (others => 0);
+      Count : array (1 .. 3) of Natural := (others => 0);
+   begin
+      pragma Assert (Trace.Outcome.Outcome = Mission.Won);
+      for I in Trace.Frames.First_Index .. Trace.Frames.Last_Index loop
+         if Integer (Trace.Frames (I).Ident) in 1 .. 3 then
+            Count (Integer (Trace.Frames (I).Ident)) :=
+              Count (Integer (Trace.Frames (I).Ident)) + 1;
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "    {");
+      Ada.Text_IO.Put_Line (File, "      ""label"": ""Mission"",");
+      Ada.Text_IO.Put (File, "      ""steps_per_tile"": ");
+      Ada.Text_IO.Put
+        (File, Trim (Integer'Image (Peds.Steps_Per_Tile)));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put (File, "      ""result"": """);
+      Ada.Text_IO.Put (File, Mission.Status_Token (Trace.Outcome.Outcome));
+      Ada.Text_IO.Put (File, """, ""tick"": ");
+      Ada.Text_IO.Put
+        (File, Trim (Integer'Image (Trace.Outcome.Tick)));
+      Ada.Text_IO.Put_Line (File, ",");
+      Ada.Text_IO.Put_Line
+        (File,
+         "      ""item"": {""id"": 1, ""name"": ""case"", ""x"":"
+         & Trim (Integer'Image (Plan.Case_At.X))
+         & ", ""y"":"
+         & Trim (Integer'Image (Plan.Case_At.Y))
+         & "},");
+      Ada.Text_IO.Put_Line (File, "      ""goals"": [");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        {""kind"": ""persuade"", ""name"": "
+         & """Persuade the contact""},");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        {""kind"": ""acquire"", ""name"": "
+         & """Acquire the case""},");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        {""kind"": ""eliminate"", ""name"": "
+         & """Eliminate the target""},");
+      Ada.Text_IO.Put_Line
+        (File,
+         "        {""kind"": ""evacuate"", ""name"": "
+         & """Stand in the zone""}");
+      Ada.Text_IO.Put_Line (File, "      ],");
+      Ada.Text_IO.Put_Line (File, "      ""goal_ticks"": [");
+      for I in Trace.Goals.First_Index .. Trace.Goals.Last_Index loop
+         Ada.Text_IO.Put (File, "        {""t"":");
+         Ada.Text_IO.Put
+           (File, Trim (Integer'Image (Trace.Goals (I).Tick)));
+         Ada.Text_IO.Put (File, ",""met"":");
+         Ada.Text_IO.Put
+           (File, Trim (Integer'Image (Trace.Goals (I).Met)));
+         Ada.Text_IO.Put (File, ",""done"":[");
+         for G in 1 .. 4 loop
+            if G > 1 then
+               Ada.Text_IO.Put (File, ",");
+            end if;
+            if Trace.Goals (I).Done (G) then
+               Ada.Text_IO.Put (File, "true");
+            else
+               Ada.Text_IO.Put (File, "false");
+            end if;
+         end loop;
+         Ada.Text_IO.Put (File, "]}");
+         if I = Trace.Goals.Last_Index then
+            Ada.Text_IO.New_Line (File);
+         else
+            Ada.Text_IO.Put_Line (File, ",");
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "      ],");
+      Ada.Text_IO.Put_Line (File, "      ""peds"": [");
+      for Who in 1 .. 3 loop
+         Ada.Text_IO.Put_Line (File, "      {");
+         Ada.Text_IO.Put (File, "        ""id"": ");
+         Ada.Text_IO.Put_Line (File, Trim (Integer'Image (Who)) & ",");
+         Ada.Text_IO.Put (File, "        ""role"": """);
+         if Who = 1 then
+            Ada.Text_IO.Put_Line (File, "agent"",");
+         elsif Who = 2 then
+            Ada.Text_IO.Put_Line (File, "civilian"",");
+         else
+            Ada.Text_IO.Put_Line (File, "guard"",");
+         end if;
+         Ada.Text_IO.Put_Line (File, "        ""frames"": [");
+         Seen (Who) := 0;
+         for I in Trace.Frames.First_Index .. Trace.Frames.Last_Index loop
+            if Integer (Trace.Frames (I).Ident) = Who then
+               Seen (Who) := Seen (Who) + 1;
+               Write_Mood_Frame
+                 (File, Trace.Frames (I), Seen (Who) = Count (Who),
+                  Goal_Here (Trace.Goals, Trace.Frames (I).Tick));
+            end if;
+         end loop;
+         Ada.Text_IO.Put_Line (File, "        ]");
+         if Who = 3 then
+            Ada.Text_IO.Put_Line (File, "      }");
+         else
+            Ada.Text_IO.Put_Line (File, "      },");
+         end if;
+      end loop;
+      Ada.Text_IO.Put_Line (File, "      ]");
+      Ada.Text_IO.Put_Line (File, "    }");
+   end Write_Mission;
 
    procedure Write_Paths
      (File : Ada.Text_IO.File_Type; M : City)
@@ -1272,7 +1409,14 @@ package body Megacorp.Map is
       begin
          Put_Route
            (File, M, "Behaviour", Path.Walk,
-            Scene.Patrol_A, Scene.Patrol_B, True);
+            Scene.Patrol_A, Scene.Patrol_B, False);
+      end;
+      declare
+         Scene : constant Mission.Fixture_Plan := Mission.Fixture_Of (M);
+      begin
+         Put_Route
+           (File, M, "Mission", Path.Walk,
+            Scene.Agent, Scene.Zone, True);
       end;
       Ada.Text_IO.Put_Line (File, "  ]");
    end Write_Paths;
@@ -1407,6 +1551,7 @@ package body Megacorp.Map is
          Write_Fight (File, M);
          Write_Drive (File, M);
          Write_Behaviour (File, M);
+         Write_Mission (File, M);
          Ada.Text_IO.Put_Line (File, "  ]");
       end;
    end Write_Motion;

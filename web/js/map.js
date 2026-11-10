@@ -344,6 +344,16 @@ function showTick() {
       panel.textContent = `${panel.textContent}   ${cars}`;
     }
   }
+  if (motion.goals && motion.goal_ticks) {
+    const row = motion.goal_ticks[Math.max(0, Math.min(tick, motion.goal_ticks.length - 1))];
+    const text = motion.goals.map((goal, index) => {
+      const done = row && row.done && row.done[index];
+      return `${goal.name}: ${done ? "done" : "open"}`;
+    }).join("   ");
+    if (text) {
+      panel.textContent = `${text}   ${panel.textContent}`;
+    }
+  }
 }
 
 function stopPlayback() {
@@ -360,7 +370,10 @@ function refreshStatus() {
     return;
   }
   if (currentMotion()) {
-    if (currentMotion().item) {
+    if (currentMotion().label === "Mission") {
+      status.textContent =
+        "The mission trace is precomputed by Ada, not run in the browser.";
+    } else if (currentMotion().item) {
       status.textContent =
         "Paths, ped motion, and action queues are precomputed by Ada, not run in the browser.";
     } else if (currentMotion().label === "Firefight") {

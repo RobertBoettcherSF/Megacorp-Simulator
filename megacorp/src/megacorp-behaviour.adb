@@ -93,7 +93,6 @@ package body Megacorp.Behaviour is
    procedure Append
      (Trace : in out Frame_Lists.Vector;
       Group : Crowd;
-      Bodies : Actions.Cast;
       At_Tick : Natural);
    procedure Check_Street
      (Trace : Frame_Lists.Vector; Plan : Street_Plan);
@@ -660,39 +659,82 @@ package body Megacorp.Behaviour is
       end loop;
    end React;
 
+   function Observe (Person : Mind) return Frame is
+      Item : Frame;
+   begin
+      Item.Ident := Actions.Ped_Ident (Person.Person);
+      Item.X := Actions.Ped_X (Person.Person);
+      Item.Y := Actions.Ped_Y (Person.Person);
+      Item.Along := Actions.Ped_Along (Person.Person);
+      Item.Facing := Actions.Ped_Facing (Person.Person);
+      Item.State := Actions.Ped_State (Person.Person);
+      Item.Temper := Person.Temper;
+      Item.Job := Person.Job;
+      Item.Has_Action := Actions.Ran (Person.Person);
+      if Item.Has_Action then
+         Item.Action := Actions.Token_Strings.To_Bounded_String
+           (Actions.Ran_Action (Person.Person));
+      end if;
+      Item.Health := Actions.Ped_Health (Person.Person);
+      Item.Ammo := Actions.Ped_Ammo (Person.Person);
+      Item.Alive := Actions.Ped_Alive (Person.Person);
+      Item.Fired := Actions.Shot_This_Tick (Person.Person);
+      Item.Landed := Actions.Shot_Landed (Person.Person);
+      Item.At_X := Actions.Shot_X (Person.Person);
+      Item.At_Y := Actions.Shot_Y (Person.Person);
+      return Item;
+   end Observe;
+
    procedure Append
      (Trace : in out Frame_Lists.Vector;
       Group : Crowd;
-      Bodies : Actions.Cast;
       At_Tick : Natural)
    is
       Item : Frame;
    begin
       for I in Group'Range loop
+         Item := Observe (Group (I));
          Item.Tick := At_Tick;
-         Item.Ident := Actions.Ped_Ident (Bodies (I));
-         Item.X := Actions.Ped_X (Bodies (I));
-         Item.Y := Actions.Ped_Y (Bodies (I));
-         Item.Along := Actions.Ped_Along (Bodies (I));
-         Item.Facing := Actions.Ped_Facing (Bodies (I));
-         Item.State := Actions.Ped_State (Bodies (I));
-         Item.Temper := Group (I).Temper;
-         Item.Job := Group (I).Job;
-         Item.Has_Action := Actions.Ran (Bodies (I));
-         if Item.Has_Action then
-            Item.Action := Actions.Token_Strings.To_Bounded_String
-              (Actions.Ran_Action (Bodies (I)));
-         end if;
-         Item.Health := Actions.Ped_Health (Bodies (I));
-         Item.Ammo := Actions.Ped_Ammo (Bodies (I));
-         Item.Alive := Actions.Ped_Alive (Bodies (I));
-         Item.Fired := Actions.Shot_This_Tick (Bodies (I));
-         Item.Landed := Actions.Shot_Landed (Bodies (I));
-         Item.At_X := Actions.Shot_X (Bodies (I));
-         Item.At_Y := Actions.Shot_Y (Bodies (I));
          Trace.Append (Item);
       end loop;
    end Append;
+
+   procedure Step
+     (Group : in out Crowd;
+      M : Map.City;
+      Items : in out Actions.Bag;
+      Fleet : in out Vehicles.Fleet;
+      At_Tick : Positive)
+   is
+      Bodies : Actions.Cast (Group'Range);
+   begin
+      for I in Group'Range loop
+         Bodies (I) := Group (I).Person;
+      end loop;
+      Actions.Tick (Bodies, M, Items, Fleet);
+      for I in Group'Range loop
+         Group (I).Person := Bodies (I);
+      end loop;
+      React (Group, Bodies, M, At_Tick);
+      for I in Group'Range loop
+         Group (I).Person := Bodies (I);
+      end loop;
+   end Step;
+
+   procedure Order
+     (Group : in out Crowd;
+      Index : Positive;
+      Planned : Actions.Action_Array;
+      How : Actions.Mode)
+   is
+      Bodies : Actions.Cast (Group'Range);
+   begin
+      for I in Group'Range loop
+         Bodies (I) := Group (I).Person;
+      end loop;
+      Actions.Order (Bodies, Index, Planned, How);
+      Group (Index).Person := Bodies (Index);
+   end Order;
 
    function Enlist
      (Who : Peds.Ped_Id;
@@ -804,25 +846,15 @@ package body Megacorp.Behaviour is
       Max_Ticks : Natural) return Frame_Lists.Vector
    is
       Group : Crowd := Start;
-      Bodies : Actions.Cast (Start'Range);
       Items : Actions.Bag (1 .. 1);
+      None : Vehicles.Fleet (1 .. 0);
       Trace : Frame_Lists.Vector;
    begin
       Items (1) := (Ident => 1, X => 1, Y => 1, Here => False);
-      for I in Group'Range loop
-         Bodies (I) := Group (I).Person;
-      end loop;
-      Append (Trace, Group, Bodies, 0);
+      Append (Trace, Group, 0);
       for At_Tick in 1 .. Max_Ticks loop
-         Actions.Tick (Bodies, M, Items);
-         for I in Group'Range loop
-            Group (I).Person := Bodies (I);
-         end loop;
-         React (Group, Bodies, M, At_Tick);
-         for I in Group'Range loop
-            Group (I).Person := Bodies (I);
-         end loop;
-         Append (Trace, Group, Bodies, At_Tick);
+         Step (Group, M, Items, None, At_Tick);
+         Append (Trace, Group, At_Tick);
       end loop;
       return Trace;
    end Run;

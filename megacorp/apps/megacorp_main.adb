@@ -5,7 +5,9 @@ with Ada.Command_Line;
 with Ada.Text_IO;
 with Megacorp.Host;
 with Megacorp.Map;
+with Megacorp.Mission;
 with Megacorp.Parameters;
+with Megacorp.RNG;
 
 procedure Megacorp_Main is
    package Params renames Megacorp.Parameters;
@@ -56,6 +58,45 @@ begin
         (Ada.Command_Line.Argument (2), Megacorp.Version);
       Ada.Text_IO.Put_Line
         ("exported maps to " & Ada.Command_Line.Argument (2));
+   elsif Ada.Command_Line.Argument_Count in 2 .. 4
+     and then Ada.Command_Line.Argument (1) = "--mission"
+   then
+      declare
+         Seed : Megacorp.RNG.Word;
+         Ticks : Natural := 200;
+         City : Megacorp.Map.City :=
+           Megacorp.Map.Test_Layout (1, P);
+         Run : Megacorp.Mission.Trace;
+      begin
+         Seed := Megacorp.RNG.Word'Value
+           (Ada.Command_Line.Argument (2));
+         if Ada.Command_Line.Argument_Count = 4
+           and then Ada.Command_Line.Argument (3) = "--ticks"
+         then
+            Ticks := Natural'Value (Ada.Command_Line.Argument (4));
+         elsif Ada.Command_Line.Argument_Count /= 2 then
+            Ada.Text_IO.Put_Line
+              (Ada.Text_IO.Current_Error,
+               "usage: megacorp [--export DIR]"
+               & " [--mission SEED [--ticks N]]");
+            Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
+            return;
+         end if;
+         if Ticks < 1 then
+            Ticks := 1;
+         end if;
+         City := Megacorp.Map.Test_Layout (Seed, P);
+         Run := Megacorp.Mission.Demonstration (City, Seed, Ticks);
+         Megacorp.Mission.Put
+           (Ada.Text_IO.Standard_Output, Seed, Run.Outcome);
+      exception
+         when Constraint_Error =>
+            Ada.Text_IO.Put_Line
+              (Ada.Text_IO.Current_Error,
+               "usage: megacorp [--export DIR]"
+               & " [--mission SEED [--ticks N]]");
+            Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
+      end;
    elsif Ada.Command_Line.Argument_Count = 0 then
       Ada.Text_IO.Put_Line ("sample map seed 42 (test layout)");
       Ada.Text_IO.Put_Line
@@ -64,7 +105,8 @@ begin
    else
       Ada.Text_IO.Put_Line
         (Ada.Text_IO.Current_Error,
-         "usage: megacorp [--export DIR]");
+         "usage: megacorp [--export DIR]"
+         & " [--mission SEED [--ticks N]]");
       Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
    end if;
 end Megacorp_Main;
