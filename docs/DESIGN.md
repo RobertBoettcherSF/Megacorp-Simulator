@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.11.0, item 11
+
+`Megacorp.Mission` runs one mission. It is given the map, the cast, the vehicles, the items, the objectives, and a script of timed orders. It ticks until every objective is met, the squad is dead, or the tick cap is reached. The objectives are eliminate a ped, acquire an item, persuade a civilian, and evacuate onto a tile. A lost squad is checked before a win, so a mission cannot be won with nobody left. `bin/megacorp --mission SEED [--ticks N]` prints the result. The page gains a Mission trace: persuade, pick up the case, shoot the guard, and the firing tile is the evacuation zone.
+
+Item 12, the C++ comparison harness, is skipped. That was the standing rule for this night.
+
 ### 2026-11-10 — version 0.10.0, item 10
 
 `Megacorp.Behaviour` is a mood on each ped, stepped after the action queue. Civilians wander, then flee from a shot inside 8 tiles. Panic spreads 4 tiles to another civilian. Guards walk a patrol and shoot a hostile they can see. Police who can see an armed hostile warn for 12 ticks, then fire. Police who only hear a shot walk toward it. An agent standing next to a calm civilian persuades them after 8 ticks; the civilian then follows and does not flee. Each ped draws from its own child of the scene seed.
@@ -144,6 +150,22 @@ This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 202
 
 **Page.** Seeds 1, 42, and 100 gain a Behaviour trace on the first road column: two civilians flee a shot, one guard patrols, another guard shoots a second hostile, and a police officer warns then fires. Both bystanders are inside earshot; the smoke test is the one that places a civilian outside earshot and inside the spread radius. Gold is a civilian, orange a guard, blue police, red a hostile. The mood is printed in brackets. The older views stay.
 
+### Item 11 — mission loop
+
+**Who ticks.** `Play` is the mission. The caller passes the city, the cast, the fleet, the items, the objectives, and the script. `Play` is the only code that advances them. A record that heap-allocated a copy of the city was the alternative. It was left out because the city is already a large value and the tests already hold it.
+
+**Objectives.** Four kinds, and every one of them has to be true. Eliminate: that ped is dead. Acquire: that item is no longer on the ground. Persuade: that ped's mood is persuaded. Evacuate: a living agent is standing on the zone tile. The squad is every ped whose role is agent. If none are alive, the result is lost, even on a tick when the objectives also became true. The alternative was to let the objectives win that tie. A mission with nobody left to extract is a loss.
+
+**Script.** Timed orders in an Ada list, and the same list written as lines (`tick ped walk x y`, `wait`, `pick`, `shoot`, `turn`). `Load` reads that file back. The CLI does not take a file. `megacorp --mission SEED [--ticks N]` runs the built-in street mission. A lost or timed-out run is still a result, so the process exits 0. A bad argument exits 1.
+
+**Fixture.** On the first road column, south of the behaviour scene: the agent waits beside a contact until persuasion lands, walks south for a case, shoots a guard who stays on one tile, and is already standing on the evacuation tile when the guard drops. The zone is that firing tile. A further walk south would have to pass the persuaded contact, who follows onto the only free road tile ahead. Scripted shots are the pistol. At one tile the hit chance is 100, so the seed does not change the winner. The default cap is 200 ticks. The fixture finishes at tick 83.
+
+**Page.** Seeds 1, 42, and 100 gain a Mission trace. The line is the walk from the agent to the zone. Objective names sit beside the tick and flip from open to done. The case is drawn until it is picked up. The older views stay.
+
+### Item 12 — comparison harness, skipped
+
+Robert's standing rule for this night is to skip the C++ comparison. No harness, no shared fixture, no diff report. The Ada mission is checked by the smoke tests and the exported trace. The alternative was a small dump of positions against a built FreeSynd binary. It was not built.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -154,7 +176,7 @@ This repository is `RobertBoettcherSF/Megacorp-Simulator`. It was created on 202
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–10 (version 0.10.0) are implemented under `megacorp/`. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 (version 0.11.0) are implemented under `megacorp/`. Item 12 is skipped. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -520,8 +542,8 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 8. **Weapons, shots, damage, death.** Done in 0.8.0 for pistol, SMG, and rifle, ped health, a seeded hit/miss roll, and building line-of-sight. `Shoot_At` fires until the target is down, out of reach, blocked, or out of ammo. Depends on: 6, 2. Try: the smoke test, and the browser page's firefight for seeds 1, 42, and 100. Size: medium.
 9. **Vehicles.** Done in 0.9.0. A car and a van drive on roads, peds enter and exit, passengers move with the vehicle, the vehicle blocks its tiles, and shots destroy it and eject the passengers. Depends on: 7. Try: the smoke test, and the browser page's vehicle trace for seeds 1, 42, and 100. Size: medium.
 10. **Behaviour components.** Done in 0.10.0. Civilians wander and flee, panic spreads by radius, guards patrol and engage, police warn for 12 ticks then fire, and an agent can persuade a neighbour. Depends on: 7, 8. Try: the smoke test, and the browser page's behaviour trace for seeds 1, 42, and 100. Size: medium.
-11. **Mission loop.** Start, fixed ticks, objectives, success/fail, stats. Headless runner: seed, inputs, N ticks, dump state. Depends on: 7–10. Try: a fixture mission (hand-built map) completes from a recorded input file. Size: medium-large (`mission.cpp` 3,197 in the reference tree).
-12. **Comparison harness (optional but valuable).** Dump selected reference-tree state (positions, health, objective flags) vs Ada on a tiny hand-built fixture. Depends on: 11. Try: a diff report. Size: small tooling. Can lag if the C++ tree is hard to build.
+11. **Mission loop.** Done in 0.11.0. A mission ticks the cast, vehicles, items, and objectives until win, squad loss, or timeout. `bin/megacorp --mission SEED [--ticks N]` prints the result. A script file round-trips. Depends on: 7–10. Try: the smoke test, `bin/megacorp --mission 42`, and the browser page's mission trace for seeds 1, 42, and 100. Size: medium.
+12. **Comparison harness.** Skipped in 0.11.0. Robert's standing rule for this night was to leave the C++ comparison out. No harness and no diff report. Depends on: 11. Try: nothing to run. Size: not built.
 
 ### Phase C — Procedural generation
 

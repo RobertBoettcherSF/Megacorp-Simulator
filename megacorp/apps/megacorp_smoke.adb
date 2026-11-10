@@ -8,6 +8,7 @@ with Ada.Containers;
 with Ada.Strings.Fixed;
 with Megacorp.Actions;
 with Megacorp.Behaviour;
+with Megacorp.Mission;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
 with Megacorp.Assets.Placeholder;
@@ -42,9 +43,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.10.0"
+     (Megacorp.Version = "0.11.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.10.0");
+      "version 0.11.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -1284,6 +1285,147 @@ begin
               (First = Second, "seeded behaviour demo repeats");
          end;
       end loop;
+   end;
+
+   declare
+      package Map renames Megacorp.Map;
+      package Act renames Megacorp.Actions;
+      package Beh renames Megacorp.Behaviour;
+      package Cars renames Megacorp.Vehicles;
+      package Job renames Megacorp.Mission;
+      package Guns renames Megacorp.Weapons;
+      use type Job.Cause;
+      use type Job.Command_Lists.Vector;
+      use type Job.Report;
+      use type Job.Status;
+      use type Beh.Frame_Lists.Vector;
+
+      Yard : constant Map.City := Map.Blank (10, 4);
+      Gun : constant Guns.Kind := Guns.Pistol;
+      Rounds : constant Natural := Guns.Profile (Gun).Magazine;
+      Group : Beh.Crowd (1 .. 2);
+      Trio : Beh.Crowd (1 .. 3);
+      Items : Act.Bag (1 .. 1);
+      Spare : Act.Bag (1 .. 1);
+      Fleet : Cars.Fleet (1 .. 0);
+      Goals : Job.Objective_List (1 .. 1);
+      Lines : Job.Command_Lists.Vector;
+      Loaded : Job.Command_Lists.Vector;
+      One : Job.Trace;
+      Two : Job.Trace;
+      C : Job.Command;
+   begin
+      Items (1) := (Ident => 1, X => 1, Y => 1, Here => False);
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 1, Y => 1), Yard, 4);
+      Group (2) := Beh.Enlist
+        (2, Beh.Guard, (X => 2, Y => 1), Yard, 4,
+         (X => 2, Y => 1), (X => 2, Y => 1));
+      Beh.Arm (Group, 1, Gun, Rounds);
+      Goals (1) := (Kind => Job.Eliminate, Target => 2);
+      C.At_Tick := 1;
+      C.Who := 1;
+      C.What := Job.Shoot;
+      C.Target := 2;
+      Lines.Append (C);
+      One := Job.Play (Yard, Group, Items, Fleet, Goals, Lines, 40);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Won
+         and then One.Outcome.Why = Job.Objectives_Met,
+         "eliminate objective can win");
+
+      Lines.Clear;
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 1, Y => 2), Yard, 5);
+      Group (2) := Beh.Enlist (2, Beh.Civilian, (X => 4, Y => 2), Yard, 5);
+      Items (1) := (Ident => 1, X => 3, Y => 2, Here => True);
+      Spare := Items;
+      Goals (1) := (Kind => Job.Acquire, Item => 1);
+      C.What := Job.Walk;
+      C.X := 3;
+      C.Y := 2;
+      Lines.Append (C);
+      C.What := Job.Pick;
+      C.Item := 1;
+      Lines.Append (C);
+      One := Job.Play (Yard, Group, Items, Fleet, Goals, Lines, 40);
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 1, Y => 2), Yard, 5);
+      Group (2) := Beh.Enlist (2, Beh.Civilian, (X => 4, Y => 2), Yard, 5);
+      Two := Job.Play (Yard, Group, Spare, Fleet, Goals, Lines, 40);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Won
+         and then One.Outcome = Two.Outcome
+         and then One.Frames = Two.Frames,
+         "acquire objective can win");
+
+      Lines.Clear;
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 2, Y => 2), Yard, 6);
+      Group (2) := Beh.Enlist (2, Beh.Civilian, (X => 3, Y => 2), Yard, 6);
+      Goals (1) := (Kind => Job.Persuade, Contact => 2);
+      One := Job.Play (Yard, Group, Items, Fleet, Goals, Lines, 20);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Won, "persuade objective can win");
+
+      Lines.Clear;
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 1, Y => 1), Yard, 7);
+      Group (2) := Beh.Enlist (2, Beh.Civilian, (X => 1, Y => 4), Yard, 7);
+      Goals (1) := (Kind => Job.Evacuate, Zone_X => 1, Zone_Y => 4);
+      C.What := Job.Walk;
+      C.X := 1;
+      C.Y := 4;
+      Lines.Append (C);
+      One := Job.Play (Yard, Group, Items, Fleet, Goals, Lines, 40);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Won, "evacuate objective can win");
+      declare
+         File_Lines : Job.Command_Lists.Vector;
+         Clean : Job.Command;
+      begin
+         Clean.At_Tick := 1;
+         Clean.Who := 1;
+         Clean.What := Job.Walk;
+         Clean.X := 2;
+         Clean.Y := 3;
+         File_Lines.Append (Clean);
+         Job.Dump (File_Lines, "/tmp/mission_script.txt");
+         Loaded := Job.Load ("/tmp/mission_script.txt");
+         Smoke_Check.Expect
+           (File_Lines = Loaded, "a script file reloads");
+      end;
+
+      Trio (1) := Beh.Enlist (1, Beh.Agent, (X => 2, Y => 2), Yard, 8);
+      Trio (2) := Beh.Enlist (2, Beh.Hostile, (X => 3, Y => 2), Yard, 8);
+      Trio (3) := Beh.Enlist (3, Beh.Civilian, (X => 10, Y => 2), Yard, 8);
+      Beh.Arm (Trio, 2, Gun, Rounds);
+      Goals (1) := (Kind => Job.Eliminate, Target => 3);
+      Lines.Clear;
+      One := Job.Play (Yard, Trio, Items, Fleet, Goals, Lines, 40);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Lost
+         and then One.Outcome.Why = Job.Squad_Lost
+         and then One.Outcome.Agents_Alive = 0,
+         "squad death loses the mission");
+
+      Lines.Clear;
+      Group (1) := Beh.Enlist (1, Beh.Agent, (X => 1, Y => 1), Yard, 9);
+      Group (2) := Beh.Enlist (2, Beh.Civilian, (X => 8, Y => 1), Yard, 9);
+      Goals (1) := (Kind => Job.Evacuate, Zone_X => 8, Zone_Y => 1);
+      One := Job.Play (Yard, Group, Items, Fleet, Goals, Lines, 4);
+      Smoke_Check.Expect
+        (One.Outcome.Outcome = Job.Timed_Out
+         and then One.Outcome.Tick = 4
+         and then One.Outcome.Why = Job.Time_Up,
+         "a short cap times out");
+
+      declare
+         City : constant Map.City :=
+           Map.Test_Layout (42, Defaults);
+         Shown : constant Job.Trace :=
+           Job.Demonstration (City, 42, 200);
+      begin
+         Smoke_Check.Expect
+           (Shown.Outcome.Outcome = Job.Won
+            and then Shown.Outcome.Met = 4,
+            "the fixture mission wins");
+      end;
    end;
 
    if Smoke_Check.Failure_Count = 0 then

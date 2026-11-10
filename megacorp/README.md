@@ -1,8 +1,9 @@
-# Megacorp Simulator 0.10.0
+# Megacorp Simulator 0.11.0
 
-Headless Ada core for Megacorp Simulator. Version 0.10.0 adds
-ped behaviour: flee, panic, patrol, engage, a police warning, and
-persuasion (design items 1–10). Version 0.6.1 keeps the browser
+Headless Ada core for Megacorp Simulator. Version 0.11.0 adds
+the mission loop: objectives, a script, and win, loss, or timeout
+(design items 1–11). Item 12, the C++ comparison, is skipped.
+Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
 specs.
@@ -44,8 +45,8 @@ That builds with `gprbuild -P megacorp.gpr -p`, regenerates the
 tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
-the vehicle demo, and the behaviour demo. It also writes
-`dist/megacorp_v0.10.0.zip` for
+the vehicle demo, the behaviour demo, and the mission demo.
+It also writes `dist/megacorp_v0.11.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -80,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.10.0 contains
+## What 0.11.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -156,13 +157,21 @@ the roads, and gets out, while another ped shoots a van. The page
 draws the car and the van. Each seed also has a behaviour trace:
 civilians flee, a guard patrols, another guard shoots, and a
 police officer warns then fires. Colour on that trace is the
-role, and the mood is printed beside the action. The page does
-not simulate.
+role, and the mood is printed beside the action.
+
+`Megacorp.Mission` ticks that cast, plus vehicles and items, until
+every objective is met, every agent is dead, or the tick cap is
+reached. The objectives are eliminate, acquire, persuade, and
+evacuate. `bin/megacorp --mission 42` runs the street mission and
+prints the result. `--ticks N` changes the cap. The page's Mission
+trace shows the same run, with each objective flipping from open
+to done. The page does not simulate.
+
 Zoom and hover work in both views. If the browser will not read the
 atlas pixels, hover uses the tile diamond and the map still loads.
 
 Shells only, for later items: `Types`, `Assets`, `World`, `World.Gen`,
-`Map.Gen`, `Mission`, `Mission.Gen`, `Agents`,
+`Map.Gen`, `Mission.Gen`, `Agents`,
 `Research`, `Session`, `Save`, `API`. There is no Syndicate asset
 package.
 

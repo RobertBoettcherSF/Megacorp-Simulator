@@ -6,6 +6,7 @@ with Megacorp.Actions;
 with Megacorp.Map;
 with Megacorp.Peds;
 with Megacorp.RNG;
+with Megacorp.Vehicles;
 with Megacorp.Weapons;
 use type Ada.Containers.Count_Type;
 
@@ -90,6 +91,27 @@ package Megacorp.Behaviour is
 
    package Frame_Lists is new Ada.Containers.Vectors
      (Index_Type => Positive, Element_Type => Frame);
+
+   --  One action tick, then the mood update. Items and vehicles
+   --  are the mission's. An empty fleet is a mission with no cars.
+   procedure Step
+     (Group : in out Crowd;
+      M : Map.City;
+      Items : in out Actions.Bag;
+      Fleet : in out Vehicles.Fleet;
+      At_Tick : Positive)
+     with Pre => Distinct (Group);
+
+   procedure Order
+     (Group : in out Crowd;
+      Index : Positive;
+      Planned : Actions.Action_Array;
+      How : Actions.Mode)
+     with Pre =>
+       Index in Group'Range
+       and then Planned'Length in 1 .. Actions.Capacity;
+
+   function Observe (Person : Mind) return Frame;
 
    function Run
      (M : Map.City;
