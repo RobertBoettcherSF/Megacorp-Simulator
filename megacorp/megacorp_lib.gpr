@@ -38,6 +38,7 @@ project Megacorp_Lib is
       "Megacorp.Research",
       "Megacorp.Session",
       "Megacorp.Save",
+      "Megacorp.Save.Log",
       "Megacorp.API");
 
    package Compiler is

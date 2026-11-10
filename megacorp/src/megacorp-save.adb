@@ -23,6 +23,8 @@ package body Megacorp.Save is
    function Trim_Word (Value : RNG.Word) return String;
    function Mode_Name (Play : Parameters.Play_Mode) return String;
    function Mode_Of (Text : String) return Parameters.Play_Mode;
+   function Outcome_Name (Which : Mission_Outcome) return String;
+   function Outcome_Of (Text : String) return Mission_Outcome;
    function Terrain_Code (Kind : Map.Terrain) return Character;
    function Terrain_Of (Code : Character) return Map.Terrain;
    function Bit (Flag : Boolean) return Character;
@@ -116,6 +118,30 @@ package body Megacorp.Save is
       end if;
       raise Save_Error with "not a Megacorp save";
    end Mode_Of;
+
+   function Outcome_Name (Which : Mission_Outcome) return String is
+   begin
+      case Which is
+         when Won =>
+            return "won";
+         when Lost =>
+            return "lost";
+         when Timed_Out =>
+            return "timeout";
+      end case;
+   end Outcome_Name;
+
+   function Outcome_Of (Text : String) return Mission_Outcome is
+   begin
+      if Text = "won" then
+         return Won;
+      elsif Text = "lost" then
+         return Lost;
+      elsif Text = "timeout" then
+         return Timed_Out;
+      end if;
+      raise Save_Error with "not a Megacorp save";
+   end Outcome_Of;
 
    function Terrain_Code (Kind : Map.Terrain) return Character is
    begin
@@ -220,16 +246,26 @@ package body Megacorp.Save is
       end loop;
       Text := Add (Text, "regions " & Trim (Snap.Regions) & ASCII.LF);
       for I in 1 .. Snap.Regions loop
-         Text := Add
-           (Text,
-            "r " & Trim (I)
-            & " " & Trim (Snap.Area (I).Owner)
-            & " " & Trim (Snap.Area (I).Tax)
-            & " " & Trim (Snap.Area (I).Unrest)
-            & " " & Trim (Snap.Area (I).Defence)
-            & " " & Trim (Snap.Area (I).Tech)
-            & " " & Bit (Snap.Area (I).Visited)
-            & ASCII.LF);
+         declare
+            Row : Ada.Strings.Unbounded.Unbounded_String;
+         begin
+            Row := Add
+              (Row,
+               "r " & Trim (I)
+               & " " & Trim (Snap.Area (I).Owner)
+               & " " & Trim (Snap.Area (I).Tax)
+               & " " & Trim (Snap.Area (I).Unrest)
+               & " " & Trim (Snap.Area (I).Defence)
+               & " " & Trim (Snap.Area (I).Tech)
+               & " " & Bit (Snap.Area (I).Visited));
+            if Snap.Area (I).Has_City then
+               Row := Add
+                 (Row, " " & Trim_Word (Snap.Area (I).City));
+            end if;
+            Text := Add
+              (Text,
+               Ada.Strings.Unbounded.To_String (Row) & ASCII.LF);
+         end;
       end loop;
       Text := Add (Text, "patches " & Trim (Snap.Patches) & ASCII.LF);
       for I in 1 .. Snap.Patches loop
@@ -252,6 +288,16 @@ package body Megacorp.Save is
             & " " & Trim (Snap.Agent (I).Health)
             & " " & Trim (Snap.Agent (I).Ammo)
             & " " & Trim (Snap.Agent (I).Region)
+            & ASCII.LF);
+      end loop;
+      Text := Add
+        (Text, "missions " & Trim (Snap.Missions) & ASCII.LF);
+      for I in 1 .. Snap.Missions loop
+         Text := Add
+           (Text,
+            "m " & Trim (Snap.Mission (I).Region)
+            & " " & Outcome_Name (Snap.Mission (I).Outcome)
+            & " " & Trim (Snap.Mission (I).Tick)
             & ASCII.LF);
       end loop;
       return Ada.Strings.Unbounded.To_String (Text);
@@ -337,6 +383,14 @@ package body Megacorp.Save is
             Snap.Area (I).Defence := Natural'Value (Field (Row, 6));
             Snap.Area (I).Tech := Natural'Value (Field (Row, 7));
             Snap.Area (I).Visited := Flag (Head (Field (Row, 8)));
+            declare
+               City_Text : constant String := Field (Row, 9);
+            begin
+               if City_Text'Length > 0 then
+                  Snap.Area (I).Has_City := True;
+                  Snap.Area (I).City := RNG.Word'Value (City_Text);
+               end if;
+            end;
          end;
       end loop;
       Cursor := Cursor + 1;
@@ -379,6 +433,31 @@ package body Megacorp.Save is
             Snap.Agent (I).Region := Positive'Value (Field (Row, 5));
          end;
       end loop;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor + 1);
+      begin
+         if Field (Mark, 1) = "missions" then
+            Cursor := Cursor + 1;
+            Count := Natural'Value (Field (Mark, 2));
+            if Count > Max_Missions then
+               raise Save_Error with "not a Megacorp save";
+            end if;
+            Snap.Missions := Count;
+            for I in 1 .. Snap.Missions loop
+               Cursor := Cursor + 1;
+               declare
+                  Row : constant String := Line_Of (Payload, Cursor);
+               begin
+                  Snap.Mission (I).Region :=
+                    Positive'Value (Field (Row, 2));
+                  Snap.Mission (I).Outcome :=
+                    Outcome_Of (Field (Row, 3));
+                  Snap.Mission (I).Tick :=
+                    Natural'Value (Field (Row, 4));
+               end;
+            end loop;
+         end if;
+      end;
       return Snap;
    end Decode;
 
@@ -423,6 +502,20 @@ package body Megacorp.Save is
          Snap.Area (I).Unrest := Item.Area (I).Unrest;
          Snap.Area (I).Defence := Item.Area (I).Defence;
          Snap.Area (I).Tech := Item.Area (I).Tech;
+         declare
+            Expected : constant RNG.Word :=
+              RNG.Derive
+                (Item.Seed,
+                 RNG.Domain_Key
+                   (RNG.Region, RNG.Stream_Index (I)));
+         begin
+            if Item.Area (I).City = Expected then
+               Snap.Area (I).Has_City := False;
+            else
+               Snap.Area (I).Has_City := True;
+               Snap.Area (I).City := Item.Area (I).City;
+            end if;
+         end;
       end loop;
    end Take;
 
@@ -443,6 +536,9 @@ package body Megacorp.Save is
          Item.Area (I).Unrest := Snap.Area (I).Unrest;
          Item.Area (I).Defence := Snap.Area (I).Defence;
          Item.Area (I).Tech := Snap.Area (I).Tech;
+         if Snap.Area (I).Has_City then
+            Item.Area (I).City := Snap.Area (I).City;
+         end if;
       end loop;
    end Restore;
 
@@ -584,6 +680,7 @@ package body Megacorp.Save is
         or else Left.Corps /= Right.Corps
         or else Left.Patches /= Right.Patches
         or else Left.Squad /= Right.Squad
+        or else Left.Missions /= Right.Missions
       then
          return False;
       end if;
@@ -604,6 +701,9 @@ package body Megacorp.Save is
            or else Left.Area (I).Defence /= Right.Area (I).Defence
            or else Left.Area (I).Tech /= Right.Area (I).Tech
            or else Left.Area (I).Visited /= Right.Area (I).Visited
+           or else Left.Area (I).Has_City /= Right.Area (I).Has_City
+           or else (Left.Area (I).Has_City
+                    and then Left.Area (I).City /= Right.Area (I).City)
          then
             return False;
          end if;
@@ -624,6 +724,14 @@ package body Megacorp.Save is
          if Left.Agent (I).Health /= Right.Agent (I).Health
            or else Left.Agent (I).Ammo /= Right.Agent (I).Ammo
            or else Left.Agent (I).Region /= Right.Agent (I).Region
+         then
+            return False;
+         end if;
+      end loop;
+      for I in 1 .. Left.Missions loop
+         if Left.Mission (I).Region /= Right.Mission (I).Region
+           or else Left.Mission (I).Outcome /= Right.Mission (I).Outcome
+           or else Left.Mission (I).Tick /= Right.Mission (I).Tick
          then
             return False;
          end if;

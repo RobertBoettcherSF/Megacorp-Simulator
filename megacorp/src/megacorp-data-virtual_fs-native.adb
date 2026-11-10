@@ -152,4 +152,35 @@ package body Megacorp.Data.Virtual_FS.Native is
          raise;
    end Write;
 
+   overriding procedure Append
+     (Store : in out Disk;
+      Path : String;
+      Data : String)
+   is
+      use Ada.Streams;
+      Name : constant String := Full (Store, Path);
+      File : Stream_IO.File_Type;
+      Raw  : Stream_Element_Array (1 .. Data'Length);
+   begin
+      for I in Data'Range loop
+         Raw (Stream_Element_Offset (I - Data'First + 1)) :=
+           Stream_Element'Val (Character'Pos (Data (I)));
+      end loop;
+      if Ada.Directories.Exists (Name) then
+         Stream_IO.Open (File, Stream_IO.Append_File, Name);
+      else
+         Stream_IO.Create (File, Stream_IO.Out_File, Name);
+      end if;
+      if Raw'Length > 0 then
+         Stream_IO.Write (File, Raw);
+      end if;
+      Stream_IO.Close (File);
+   exception
+      when others =>
+         if Stream_IO.Is_Open (File) then
+            Stream_IO.Close (File);
+         end if;
+         raise;
+   end Append;
+
 end Megacorp.Data.Virtual_FS.Native;

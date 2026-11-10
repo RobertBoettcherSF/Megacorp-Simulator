@@ -10,18 +10,26 @@ use type Megacorp.RNG.Word;
 
 --  Item 17. Format version 1: the master seed, plus the fields
 --  play can change. Names, roads, and an untouched city are
---  rebuilt from the seed. Item 19 will migrate a later version.
+--  rebuilt from the seed. A re-rolled city seed and finished
+--  mission marks are optional tail fields, still version 1.
+--  Item 18 records the changes since this snapshot.
+--  Item 19 will migrate a later version.
 package Megacorp.Save is
    Format_Version : constant := 1;
 
-   --  A default 40-region snapshot after 30 days is 1082 bytes.
-   --  One ruined tile adds one patch line. See DESIGN.md.
+   --  A plain 40-region snapshot is about 1 KiB, including the
+   --  missions line. One ruined tile adds one patch line.
    Budget : constant := 8192;
 
    Max_Patches : constant := 128;
    Squad_Size  : constant := 4;
 
    Save_Error : exception;
+
+   --  A finished mission. A fight still in progress is not stored.
+   type Mission_Outcome is (Won, Lost, Timed_Out);
+
+   Max_Missions : constant := 64;
 
    type Region_State is record
       Owner    : Positive := 1;
@@ -30,6 +38,14 @@ package Megacorp.Save is
       Defence  : Natural := 0;
       Tech     : Natural := 0;
       Visited  : Boolean := False;
+      Has_City : Boolean := False;
+      City     : RNG.Word := 0;
+   end record;
+
+   type Mission_Mark is record
+      Region  : Positive := 1;
+      Outcome : Mission_Outcome := Won;
+      Tick    : Natural := 0;
    end record;
 
    type Corp_State is record
@@ -61,20 +77,23 @@ package Megacorp.Save is
      array (1 .. Parameters.Max_Corporations) of Corp_State;
    type Patch_Table is array (1 .. Max_Patches) of Patch;
    type Squad_Table is array (1 .. Squad_Size) of Agent_State;
+   type Mission_Table is array (1 .. Max_Missions) of Mission_Mark;
 
    type Snapshot is record
-      Seed    : RNG.Word := 0;
-      Day     : Natural := 0;
-      Play    : Parameters.Play_Mode := Parameters.Auto_Play;
-      Locked  : Boolean := False;
-      Regions : Positive := 1;
-      Corps   : Positive := 1;
-      Area    : Region_Table;
-      Company : Corp_Table;
-      Patches : Natural := 0;
-      Patch   : Patch_Table;
-      Squad   : Natural := Squad_Size;
-      Agent   : Squad_Table;
+      Seed     : RNG.Word := 0;
+      Day      : Natural := 0;
+      Play     : Parameters.Play_Mode := Parameters.Auto_Play;
+      Locked   : Boolean := False;
+      Regions  : Positive := 1;
+      Corps    : Positive := 1;
+      Area     : Region_Table;
+      Company  : Corp_Table;
+      Patches  : Natural := 0;
+      Patch    : Patch_Table;
+      Squad    : Natural := Squad_Size;
+      Agent    : Squad_Table;
+      Missions : Natural := 0;
+      Mission  : Mission_Table;
    end record;
 
    function Capture
@@ -82,7 +101,9 @@ package Megacorp.Save is
       Day : Natural;
       Play : Parameters.Play_Mode) return Snapshot;
 
-   --  Copy the mutable world fields. Patches and the squad stay.
+   --  Copy the mutable world fields. Patches, the squad, and
+   --  mission marks stay. A city seed that is not the generated
+   --  one is kept; the generated seed is not stored.
    procedure Take
      (Snap : in out Snapshot;
       Item : World.Atlas;

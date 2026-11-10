@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.18.0, item 18
+
+`Megacorp.Save.Log` appends one checksummed line for each change since a snapshot. The file starts with `MGCD`, the format version, and the checksum of the snapshot it belongs to. A day line is `day none`, or `day tax` with the region and the rate. The other lines are a region row, a finished mission, a tile patch, a squad agent, or a re-rolled city seed. Loading is that snapshot plus a replay. After 32 lines, or when asked, the log is folded into a new snapshot. A torn final line is dropped and a warning is logged. A bad line earlier in the file is rejected.
+
+`bin/megacorp --campaign 42 --days 0 --save slot.mgc --log slot.log` writes the baseline. `--load slot.mgc --log slot.log --days N` appends N days. `--compact` folds them. A scenario refuses a re-roll. Free play and auto-play re-roll only a region that has not been visited. A plain day-4 snapshot is 1062 bytes. An empty log is 46 bytes.
+
 ### 2026-11-10 — version 0.17.0, item 17
 
 `Megacorp.Save` writes format version 1 through `Data.Virtual_FS`. The file starts with `MGC1`, the format version, and an FNV-1a checksum of the body. The body stores the master seed, the world day, the play mode, the locked flag, and the generator version. Corporations keep cash, earned, spent, and whether they are eliminated. Regions keep owner, tax, unrest, defence, tech, and a visited flag. A city is not stored: only tiles that differ from the generated city, as a patch list. The player squad is four agents, each with health, ammo, and a region. Names, colours, roads, population, and an untouched city are rebuilt from the seed.
@@ -264,6 +270,22 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Continue.** Load copies the mutable fields onto a world generated from the saved seed. Further days use the same day procedure as an uninterrupted run, so five days, a save, and five more days match ten days from the start. Patches and the squad do not feed the day formula, so they survive the round trip without changing the campaign.
 
+### Item 18 — delta log
+
+**A second file.** The snapshot stays the baseline from 0.17.0. The log is append-only so a crash can spoil only the last line. Rewriting one combined file would have put every earlier line at risk. `Virtual_FS.Append` creates the file or adds bytes. The native backend opens it in append mode. A later browser backend implements the same call.
+
+**One checksum per line.** The snapshot checksum covers the whole body, which cannot survive a torn tail. Each log line ends with the FNV-1a 64 of the words before that checksum, using the same basis and prime as the snapshot. The header is `MGCD 1`. The next line names the snapshot the log belongs to. A format version other than 1 is rejected. Item 19 migrates snapshots, not this log.
+
+**What a line records.** `day none` replays one campaign day, because that day is a pure function of the atlas. `day tax REGION RATE` sets that tax and then plays the day, so the input is in the log. A region line writes owner, tax, unrest, defence, tech, and the visited flag without playing a day. A mission line is the finished result (won, lost, or timeout) and marks the region visited. There is no value for a fight still in progress, so a crash during a fight leaves the last finished mission and drops the torn line. Tile patches and squad changes are their own lines. They are not produced by re-running the fight. A re-roll line stores the new city seed. Names, roads, and an untouched city stay derived.
+
+**Re-roll.** Scenario play raises `scenario refuses re-roll`, including for a region nobody has visited. Free play and auto-play raise `visited region stays` once a patch or a mission has marked the region. The city seed and the patch are left as they were. A re-rolled seed is stored on the snapshot region because it is not the seed the generator builds. Finished missions are a `missions` section. Both are still format version 1. A 0.17.0 file has neither section and still loads.
+
+**Torn tail.** If the file does not end on a newline, the partial tail is dropped. If the last complete line fails its checksum or does not parse, it is dropped too. The log warns `torn delta record dropped`. The kept lines are written back before the next append, so the new line is not glued onto the tear. A bad line earlier in the file raises `checksum mismatch`.
+
+**Compact.** After 32 records, and when `--compact` is passed, the snapshot is written and the log is replaced by a header for that snapshot. The snapshot is written first. A crash before the log is replaced leaves a new snapshot and an old log. Replay compares the log's base with the snapshot and, on a mismatch, warns `delta base mismatch` and does not apply the log, so those days are not played twice. A plain day-4 snapshot is 1062 bytes. An empty log header is 46 bytes. The snapshot budget stays 8192.
+
+**Command.** `--log FILE` replays that log and appends the new days. The snapshot file stays at the last compact until `--compact`. Without `--log`, `--save` still writes the world after N days. The snapshot and the log share a directory, because both calls go through one virtual-FS root.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -274,7 +296,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–17 (version 0.17.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–18 (version 0.18.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -653,7 +675,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 ### Phase D — Persistence
 
 17. **Save format v1.** Done in 0.17.0. Magic, format version, checksum, master seed, world day, play mode, locked flag, mutable region and corporation fields, tile patches, and the player squad. Written through the virtual file system. Depends on: 15, 11. Try: `bin/megacorp --campaign 42 --days 10 --save slot.mgc`, then `--load slot.mgc --days 10`. Size: medium.
-18. **Delta log + mission-end snapshot.** Recover a crash after a completed mission; mid-mission policy stays the open question in §10 (recommendation: discard an in-progress fight in v1). Depends on: 17. Try: kill the process after a mission-end write; reload is consistent. Size: small-medium.
+18. **Delta log + mission-end snapshot.** Done in 0.18.0. Append-only checksummed lines since the snapshot: days and their inputs, region rows, finished missions, tile patches, squad changes, and re-rolls. A torn final line is dropped. Compact after 32 lines or on demand. A scenario refuses a re-roll. Depends on: 17. Try: `bin/megacorp --campaign 42 --days 0 --save slot.mgc --log slot.log`, then `--load slot.mgc --log slot.log --days 10`, then `--compact`. Size: small-medium.
 19. **Migration hooks.** Fake a v0 save and upgrade it; refuse a future version cleanly. Honour the play-mode re-roll rule from §7.6. Depends on: 17. Try: a fixture old save loads with a “migrated” note. Size: small.
 
 ### Phase E — Browser front end, first playable mission
