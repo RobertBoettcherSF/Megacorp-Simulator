@@ -21,6 +21,12 @@ package Megacorp.Data.Virtual_FS.Native is
      (Store : Disk; Path : String) return Name_Lists.Vector
      with Pre => Is_Logical_Path (Path);
 
+   overriding procedure Write
+     (Store : in out Disk;
+      Path : String;
+      Data : String)
+     with Pre => Is_Logical_Path (Path) and then Path'Length > 0;
+
 private
    type Disk (Length : Natural) is new Backend with record
       Root : String (1 .. Length);

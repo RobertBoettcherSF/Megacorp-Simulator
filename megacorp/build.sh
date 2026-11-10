@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build Megacorp Simulator 0.16.0, regenerate the tileset and web/data,
+# Build Megacorp Simulator 0.17.0, regenerate the tileset and web/data,
 # and optionally pack sources plus the Linux x86_64 binaries. The zip
 # is not a deliverable; the browser page reads the exported JSON.
 set -eu
@@ -41,7 +41,7 @@ echo "---- bin/megacorp_smoke ----"
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-dest=$stage/megacorp_v0.16.0
+dest=$stage/megacorp_v0.17.0
 mkdir -p "$dest/bin" "$dest/src" "$dest/apps"
 
 cp README.md ../LICENSE .gitignore build.sh \
@@ -52,9 +52,9 @@ cp bin/megacorp bin/megacorp_smoke "$dest/bin/"
 chmod 755 "$dest/build.sh" "$dest/bin/megacorp" "$dest/bin/megacorp_smoke"
 
 mkdir -p dist
-rm -f dist/megacorp_v0.16.0.zip
+rm -f dist/megacorp_v0.17.0.zip
 (
    cd "$stage"
-   zip -r -X "$root/dist/megacorp_v0.16.0.zip" megacorp_v0.16.0
+   zip -r -X "$root/dist/megacorp_v0.17.0.zip" megacorp_v0.17.0
 )
-echo "wrote $root/dist/megacorp_v0.16.0.zip (optional, not a deliverable)"
+echo "wrote $root/dist/megacorp_v0.17.0.zip (optional, not a deliverable)"

@@ -4,9 +4,10 @@
 with Ada.Containers.Indefinite_Vectors;
 
 --  Item 4. Read files by a logical path such as "assets/tiles.json".
---  The core uses this interface only. Megacorp.Data.Virtual_FS.Native
---  is the disk backend. A later WASM host can implement Backend with
---  OPFS or fetch. Callers take Backend'Class.
+--  Item 17 adds Write, so a save uses the same interface a browser
+--  backend can implement later with OPFS. The core uses this
+--  interface only. Megacorp.Data.Virtual_FS.Native is the disk
+--  backend. Callers take Backend'Class.
 package Megacorp.Data.Virtual_FS is
    package Name_Lists is new Ada.Containers.Indefinite_Vectors
      (Index_Type => Positive, Element_Type => String);
@@ -28,6 +29,15 @@ package Megacorp.Data.Virtual_FS is
      (Store : Backend; Path : String) return Name_Lists.Vector
       is abstract
      with Pre'Class => Is_Logical_Path (Path);
+
+   --  Create or replace an ordinary file. Path is relative to the
+   --  backend root.
+   procedure Write
+     (Store : in out Backend;
+      Path : String;
+      Data : String) is abstract
+     with Pre'Class =>
+       Is_Logical_Path (Path) and then Path'Length > 0;
 
    function Is_Logical_Path (Path : String) return Boolean;
 end Megacorp.Data.Virtual_FS;
