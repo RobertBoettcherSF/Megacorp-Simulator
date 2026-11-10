@@ -4,10 +4,11 @@
 with Ada.Containers.Indefinite_Vectors;
 
 --  Item 4. Read files by a logical path such as "assets/tiles.json".
---  Item 17 adds Write, so a save uses the same interface a browser
---  backend can implement later with OPFS. The core uses this
---  interface only. Megacorp.Data.Virtual_FS.Native is the disk
---  backend. Callers take Backend'Class.
+--  Item 17 adds Write, and item 18 adds Append, so a save and
+--  its log use the same interface a browser backend can implement
+--  later with OPFS. The core uses this interface only.
+--  Megacorp.Data.Virtual_FS.Native is the disk backend. Callers
+--  take Backend'Class.
 package Megacorp.Data.Virtual_FS is
    package Name_Lists is new Ada.Containers.Indefinite_Vectors
      (Index_Type => Positive, Element_Type => String);
@@ -33,6 +34,15 @@ package Megacorp.Data.Virtual_FS is
    --  Create or replace an ordinary file. Path is relative to the
    --  backend root.
    procedure Write
+     (Store : in out Backend;
+      Path : String;
+      Data : String) is abstract
+     with Pre'Class =>
+       Is_Logical_Path (Path) and then Path'Length > 0;
+
+   --  Add bytes at the end. Creates the file when it is missing.
+   --  A save log uses this so a crash can tear only the last record.
+   procedure Append
      (Store : in out Backend;
       Path : String;
       Data : String) is abstract

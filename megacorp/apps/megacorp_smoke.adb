@@ -26,6 +26,7 @@ with Megacorp.Peds;
 with Megacorp.Parameters;
 with Megacorp.RNG;
 with Megacorp.Save;
+with Megacorp.Save.Log;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -50,9 +51,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.17.0"
+     (Megacorp.Version = "0.18.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.17.0");
+      "version 0.18.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -675,6 +676,355 @@ begin
       Smoke_Check.Expect
         (Match (Fresh, Whole),
          "load then continue matches one play");
+   end;
+
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Camp renames Megacorp.World.Campaign;
+      package Globe renames Megacorp.World.Gen;
+      package Journal renames Megacorp.Save.Log;
+      use type Megacorp.Save.Mission_Outcome;
+
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean;
+      function Match
+        (Left, Right : Megacorp.World.Atlas) return Boolean
+      is
+      begin
+         for C in 1 .. Left.Corps loop
+            if Left.Company (C).Cash /= Right.Company (C).Cash
+              or else Left.Company (C).Eliminated
+                /= Right.Company (C).Eliminated
+            then
+               return False;
+            end if;
+         end loop;
+         for I in 1 .. Left.Regions loop
+            if Left.Area (I).Owner /= Right.Area (I).Owner
+              or else Left.Area (I).Tax /= Right.Area (I).Tax
+              or else Left.Area (I).Unrest /= Right.Area (I).Unrest
+              or else Left.Area (I).Defence /= Right.Area (I).Defence
+              or else Left.Area (I).Tech /= Right.Area (I).Tech
+              or else Left.Area (I).City /= Right.Area (I).City
+            then
+               return False;
+            end if;
+         end loop;
+         return True;
+      end Match;
+
+      function Refused
+        (Snap : Megacorp.Save.Snapshot;
+         Item : Megacorp.World.Atlas;
+         Region : Positive;
+         Expect : String) return Boolean;
+      function Refused
+        (Snap : Megacorp.Save.Snapshot;
+         Item : Megacorp.World.Atlas;
+         Region : Positive;
+         Expect : String) return Boolean
+      is
+      begin
+         declare
+            Ev : constant Journal.Event :=
+              Journal.Reroll (Snap, Item, Region);
+            pragma Unreferenced (Ev);
+         begin
+            return False;
+         end;
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            return Ada.Exceptions.Exception_Message (Error) = Expect;
+      end Refused;
+
+      function Bad_Checksum return Boolean;
+      function Bad_Checksum return Boolean is
+         Root : constant Native.Disk :=
+           Native.Open ("/tmp/megacorp-log");
+         Book : Journal.Journal;
+      begin
+         Book := Journal.Load (Root, "bad.log");
+         return Journal.Notice (Book) = "checksum mismatch";
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            return Ada.Exceptions.Exception_Message (Error)
+              = "checksum mismatch";
+      end Bad_Checksum;
+
+      Home : Megacorp.World.Atlas := Globe.Generate (42, Defaults);
+      Locked : constant Megacorp.Save.Snapshot :=
+        Megacorp.Save.Capture (Home, 0, Params.Scenario);
+      City_2 : constant RNG.Word := Home.Area (2).City;
+      Free : Megacorp.Save.Snapshot :=
+        Megacorp.Save.Capture (Home, 0, Params.Free_Play);
+      City_8 : constant RNG.Word := Home.Area (8).City;
+      Auto : Megacorp.Save.Snapshot :=
+        Megacorp.Save.Capture (Home, 0, Params.Auto_Play);
+      City_9 : constant RNG.Word := Home.Area (9).City;
+      Root : Native.Disk := Native.Open ("/tmp/megacorp-log");
+      Book : Journal.Journal;
+      Cell : constant Megacorp.Map.Tile :=
+        (Kind => Megacorp.Map.Open_Ground,
+         Level => 0,
+         Walkable => True,
+         Drivable => False);
+   begin
+      Ada.Directories.Create_Path ("/tmp/megacorp-log");
+      Smoke_Check.Expect
+        (Refused (Locked, Home, 2, "scenario refuses re-roll")
+         and then Home.Area (2).City = City_2,
+         "a scenario refuses re-roll");
+
+      Book := Journal.Start (Root, "roll.log", Auto);
+      Journal.Commit
+        (Root, "roll.log", Auto, Home, Book,
+         Journal.Reroll (Auto, Home, 9));
+      Smoke_Check.Expect
+        (Home.Area (9).City /= City_9
+         and then Auto.Area (9).Has_City,
+         "auto-play re-rolls an unvisited region");
+      Journal.Commit
+        (Root, "roll.log", Auto, Home, Book,
+         Journal.Tile_Change (9, 2, 2, Cell));
+      declare
+         Kept : constant RNG.Word := Home.Area (9).City;
+      begin
+         Smoke_Check.Expect
+           (Auto.Area (9).Visited
+            and then Refused
+              (Auto, Home, 9, "visited region stays")
+            and then Home.Area (9).City = Kept,
+            "a visited region stays as left");
+      end;
+
+      Book := Journal.Start (Root, "free.log", Free);
+      Journal.Commit
+        (Root, "free.log", Free, Home, Book,
+         Journal.Reroll (Free, Home, 8));
+      Smoke_Check.Expect
+        (Home.Area (8).City /= City_8
+         and then Free.Area (8).Has_City
+         and then not Free.Area (8).Visited,
+         "free play re-rolls only an unvisited region");
+      Journal.Commit
+        (Root, "free.log", Free, Home, Book,
+         Journal.Tile_Change (8, 3, 3, Cell));
+      declare
+         Kept : constant RNG.Word := Home.Area (8).City;
+         City : Megacorp.Map.City :=
+           Megacorp.Map.Gen.Generate (Kept, Defaults);
+      begin
+         Megacorp.Save.Apply_Patches (Free, 8, City);
+         Smoke_Check.Expect
+           (Free.Area (8).Visited
+            and then Refused
+              (Free, Home, 8, "visited region stays")
+            and then Home.Area (8).City = Kept
+            and then Megacorp.Map.Tile_At (City, 3, 3).Kind
+              = Megacorp.Map.Open_Ground,
+            "a visited region keeps its patch");
+      end;
+
+      declare
+         Left : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Right : Megacorp.World.Atlas := Left;
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture
+             (Right, 0, Params.Auto_Play);
+      begin
+         Left.Area (1).Tax := 40;
+         Camp.Advance (Left);
+         Book := Journal.Start (Root, "tax.log", Snap);
+         Journal.Commit
+           (Root, "tax.log", Snap, Right, Book,
+            Journal.Day_Tax (1, 40));
+         Smoke_Check.Expect
+           (Match (Left, Right) and then Snap.Day = 1,
+            "a day tick carries its tax input");
+      end;
+
+      declare
+         Marked : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Again : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Marked, 0, Params.Free_Play);
+         Back : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Again, 0, Params.Free_Play);
+      begin
+         Marked.Area (2).Tax := 15;
+         Book := Journal.Start (Root, "mark.log", Snap);
+         Journal.Commit
+           (Root, "mark.log", Snap, Marked, Book,
+            Journal.Region_Set (Snap, Marked, 2));
+         Journal.Commit
+           (Root, "mark.log", Snap, Marked, Book,
+            Journal.Mission_Done (4, Megacorp.Save.Won, 83));
+         Journal.Commit
+           (Root, "mark.log", Snap, Marked, Book,
+            Journal.Squad_Change (1, 70, 9, 1));
+         Book := Journal.Load (Root, "mark.log");
+         Journal.Replay (Back, Again, Book);
+         Smoke_Check.Expect
+           (Megacorp.Save.Same (Snap, Back)
+            and then Again.Area (2).Tax = 15
+            and then Back.Area (4).Visited
+            and then Back.Mission (1).Outcome = Megacorp.Save.Won
+            and then Back.Agent (1).Health = 70,
+            "region, mission, and squad records replay");
+      end;
+
+      declare
+         Lived : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Straight : Megacorp.World.Atlas := Lived;
+         Again : Megacorp.World.Atlas :=
+           Globe.Generate (42, Defaults);
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Lived, 0, Params.Auto_Play);
+         Back : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Again, 0, Params.Auto_Play);
+      begin
+         Book := Journal.Start (Root, "play.log", Snap);
+         for Step in 1 .. 6 loop
+            Journal.Commit
+              (Root, "play.log", Snap, Lived, Book,
+               Journal.Day_None);
+         end loop;
+         Camp.Run (Straight, 6);
+         Book := Journal.Load (Root, "play.log");
+         Journal.Replay (Back, Again, Book);
+         Smoke_Check.Expect
+           (Match (Lived, Straight)
+            and then Match (Again, Straight)
+            and then Megacorp.Save.Same (Snap, Back)
+            and then Snap.Day = 6,
+            "snapshot plus log equals continuous play");
+      end;
+
+      declare
+         Lived : Megacorp.World.Atlas :=
+           Globe.Generate (3, Defaults);
+         Again : Megacorp.World.Atlas :=
+           Globe.Generate (3, Defaults);
+         Straight : Megacorp.World.Atlas := Again;
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Lived, 0, Params.Auto_Play);
+         Back : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Again, 0, Params.Auto_Play);
+      begin
+         Book := Journal.Start (Root, "torn.log", Snap);
+         for Step in 1 .. 3 loop
+            Journal.Commit
+              (Root, "torn.log", Snap, Lived, Book,
+               Journal.Day_None);
+         end loop;
+         Native.Append (Root, "torn.log", "day none");
+         Book := Journal.Load (Root, "torn.log");
+         Smoke_Check.Expect
+           (Journal.Notice (Book) = "torn delta record dropped"
+            and then Journal.Count (Book) = 3,
+            "a torn tail is reported");
+         Journal.Rewrite (Root, "torn.log", Back, Book);
+         Book := Journal.Load (Root, "torn.log");
+         Journal.Replay (Back, Again, Book);
+         Camp.Run (Straight, 3);
+         Smoke_Check.Expect
+           (Journal.Notice (Book) = ""
+            and then Match (Again, Straight)
+            and then Megacorp.Save.Same (Snap, Back),
+            "a torn tail is recovered");
+      end;
+
+      declare
+         Raw : constant String := Native.Read (Root, "torn.log");
+         Bad : String := Raw;
+         Mark : Natural := Raw'First;
+      begin
+         while Mark < Raw'Last - 3
+           and then Raw (Mark .. Mark + 3) /= "day "
+         loop
+            Mark := Mark + 1;
+         end loop;
+         Bad (Mark) := 'D';
+         Native.Write (Root, "bad.log", Bad);
+      end;
+      Smoke_Check.Expect
+        (Bad_Checksum, "a bad middle checksum is rejected");
+
+      declare
+         Lived : Megacorp.World.Atlas :=
+           Globe.Generate (5, Defaults);
+         Straight : Megacorp.World.Atlas :=
+           Globe.Generate (5, Defaults);
+         Again : Megacorp.World.Atlas := Straight;
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Lived, 0, Params.Auto_Play);
+         Cash : Natural;
+      begin
+         Megacorp.Save.Store (Root, "fold.mgc", Snap);
+         Book := Journal.Start (Root, "fold.log", Snap);
+         for Step in 1 .. 5 loop
+            Journal.Commit
+              (Root, "fold.log", Snap, Lived, Book,
+               Journal.Day_None);
+         end loop;
+         Camp.Run (Straight, 5);
+         declare
+            Old : constant String := Native.Read (Root, "fold.log");
+         begin
+            Journal.Compact
+              (Root, "fold.mgc", "fold.log", Snap, Book);
+            Smoke_Check.Expect
+              (Journal.Count (Book) = 0 and then Snap.Day = 5,
+               "compaction clears the log");
+            Snap := Megacorp.Save.Load (Root, "fold.mgc");
+            Megacorp.Save.Restore (Snap, Again);
+            Smoke_Check.Expect
+              (Match (Again, Straight) and then Match (Lived, Straight),
+               "compaction matches continuous play");
+            Native.Write (Root, "fold.log", Old);
+            Book := Journal.Load (Root, "fold.log");
+            Cash := Again.Company (1).Cash;
+            Journal.Replay (Snap, Again, Book);
+            Smoke_Check.Expect
+              (Journal.Notice (Book) = "delta base mismatch"
+               and then Again.Company (1).Cash = Cash,
+               "a log for an older snapshot is not replayed");
+         end;
+      end;
+
+      declare
+         Lived : Megacorp.World.Atlas :=
+           Globe.Generate (9, Defaults);
+         Straight : Megacorp.World.Atlas :=
+           Globe.Generate (9, Defaults);
+         Again : Megacorp.World.Atlas := Straight;
+         Snap : Megacorp.Save.Snapshot :=
+           Megacorp.Save.Capture (Lived, 0, Params.Auto_Play);
+      begin
+         Book := Journal.Start (Root, "year.log", Snap);
+         for Step in 1 .. Journal.Compact_After loop
+            Journal.Commit
+              (Root, "year.log", Snap, Lived, Book,
+               Journal.Day_None);
+            if Journal.Due (Book) then
+               Journal.Compact
+                 (Root, "year.mgc", "year.log", Snap, Book);
+            end if;
+         end loop;
+         Camp.Run (Straight, Journal.Compact_After);
+         Snap := Megacorp.Save.Load (Root, "year.mgc");
+         Megacorp.Save.Restore (Snap, Again);
+         Smoke_Check.Expect
+           (Journal.Count (Book) = 0
+            and then Snap.Day = Journal.Compact_After
+            and then Match (Lived, Straight)
+            and then Match (Again, Straight),
+            "a full log compacts to the same world");
+      end;
    end;
 
    declare

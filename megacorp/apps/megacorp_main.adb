@@ -13,6 +13,7 @@ with Megacorp.Data.Virtual_FS.Native;
 with Megacorp.Parameters;
 with Megacorp.RNG;
 with Megacorp.Save;
+with Megacorp.Save.Log;
 with Megacorp.World.Campaign;
 with Megacorp.World.Gen;
 
@@ -95,93 +96,228 @@ begin
             return Path (Last + 1 .. Path'Last);
          end Base;
 
+         procedure Keep
+           (Text : String;
+            Into : in out String;
+            Len : out Natural);
+         procedure Keep
+           (Text : String;
+            Into : in out String;
+            Len : out Natural)
+         is
+         begin
+            if Text'Length > Into'Length or else Text'Length = 0 then
+               raise Constraint_Error;
+            end if;
+            Len := Text'Length;
+            Into (Into'First .. Into'First + Len - 1) := Text;
+         end Keep;
+
          Seed : Megacorp.RNG.Word;
          Days : Natural := 0;
          Have_Days : Boolean := False;
+         Do_Compact : Boolean := False;
          Save_Path : String (1 .. 256) := (others => ' ');
          Load_Path : String (1 .. 256) := (others => ' ');
+         Log_Path : String (1 .. 256) := (others => ' ');
          Save_Len : Natural := 0;
          Load_Len : Natural := 0;
+         Log_Len : Natural := 0;
          Cursor : Positive := 3;
          Globe : Megacorp.World.Atlas;
          Snap : Megacorp.Save.Snapshot;
+         Book : Megacorp.Save.Log.Journal;
          Start : Natural := 0;
       begin
          Seed := Megacorp.RNG.Word'Value
            (Ada.Command_Line.Argument (2));
          while Cursor <= Ada.Command_Line.Argument_Count loop
-            if Cursor = Ada.Command_Line.Argument_Count then
-               raise Constraint_Error;
-            end if;
-            if Ada.Command_Line.Argument (Cursor) = "--days" then
-               Days := Natural'Value
-                 (Ada.Command_Line.Argument (Cursor + 1));
-               Have_Days := True;
-            elsif Ada.Command_Line.Argument (Cursor) = "--save" then
-               declare
-                  Text : constant String :=
-                    Ada.Command_Line.Argument (Cursor + 1);
-               begin
-                  if Text'Length > Save_Path'Length then
-                     raise Constraint_Error;
-                  end if;
-                  Save_Len := Text'Length;
-                  Save_Path (1 .. Save_Len) := Text;
-               end;
-            elsif Ada.Command_Line.Argument (Cursor) = "--load" then
-               declare
-                  Text : constant String :=
-                    Ada.Command_Line.Argument (Cursor + 1);
-               begin
-                  if Text'Length > Load_Path'Length then
-                     raise Constraint_Error;
-                  end if;
-                  Load_Len := Text'Length;
-                  Load_Path (1 .. Load_Len) := Text;
-               end;
-            else
-               raise Constraint_Error;
-            end if;
-            Cursor := Cursor + 2;
+            declare
+               Arg : constant String :=
+                 Ada.Command_Line.Argument (Cursor);
+            begin
+               if Arg = "--compact" then
+                  Do_Compact := True;
+                  Cursor := Cursor + 1;
+               elsif Cursor = Ada.Command_Line.Argument_Count then
+                  raise Constraint_Error;
+               elsif Arg = "--days" then
+                  Days := Natural'Value
+                    (Ada.Command_Line.Argument (Cursor + 1));
+                  Have_Days := True;
+                  Cursor := Cursor + 2;
+               elsif Arg = "--save" then
+                  Keep
+                    (Ada.Command_Line.Argument (Cursor + 1),
+                     Save_Path, Save_Len);
+                  Cursor := Cursor + 2;
+               elsif Arg = "--load" then
+                  Keep
+                    (Ada.Command_Line.Argument (Cursor + 1),
+                     Load_Path, Load_Len);
+                  Cursor := Cursor + 2;
+               elsif Arg = "--log" then
+                  Keep
+                    (Ada.Command_Line.Argument (Cursor + 1),
+                     Log_Path, Log_Len);
+                  Cursor := Cursor + 2;
+               else
+                  raise Constraint_Error;
+               end if;
+            end;
          end loop;
-         if not Have_Days then
+         if not Have_Days
+           or else (Do_Compact and then Log_Len = 0)
+           or else (Log_Len > 0
+                    and then Save_Len = 0
+                    and then Load_Len = 0)
+           or else (Log_Len > 0 and then Save_Len > 0
+                    and then Parent (Save_Path (1 .. Save_Len))
+                      /= Parent (Log_Path (1 .. Log_Len)))
+           or else (Log_Len > 0 and then Load_Len > 0
+                    and then Parent (Load_Path (1 .. Load_Len))
+                      /= Parent (Log_Path (1 .. Log_Len)))
+         then
             raise Constraint_Error;
          end if;
          Globe := Megacorp.World.Gen.Generate (Seed, P);
-         if Load_Len > 0 then
-            declare
-               Root : constant Megacorp.Data.Virtual_FS.Native.Disk :=
-                 Megacorp.Data.Virtual_FS.Native.Open
-                   (Parent (Load_Path (1 .. Load_Len)));
-            begin
-               Snap := Megacorp.Save.Load
-                 (Root, Base (Load_Path (1 .. Load_Len)));
-            end;
-            if Snap.Seed /= Seed then
-               raise Megacorp.Save.Save_Error with "seed mismatch";
+         if Log_Len = 0 then
+            if Load_Len > 0 then
+               declare
+                  Root : constant
+                    Megacorp.Data.Virtual_FS.Native.Disk :=
+                    Megacorp.Data.Virtual_FS.Native.Open
+                      (Parent (Load_Path (1 .. Load_Len)));
+               begin
+                  Snap := Megacorp.Save.Load
+                    (Root, Base (Load_Path (1 .. Load_Len)));
+               end;
+               if Snap.Seed /= Seed then
+                  raise Megacorp.Save.Save_Error with "seed mismatch";
+               end if;
+               Megacorp.Save.Restore (Snap, Globe);
+               Start := Snap.Day;
+            else
+               Snap := Megacorp.Save.Capture
+                 (Globe, 0, Megacorp.Parameters.Auto_Play);
             end if;
-            Megacorp.Save.Restore (Snap, Globe);
-            Start := Snap.Day;
-         else
-            Snap := Megacorp.Save.Capture
-              (Globe, 0, Megacorp.Parameters.Auto_Play);
-         end if;
-         Megacorp.World.Campaign.Put_Day
-           (Ada.Text_IO.Standard_Output, Globe, Start);
-         for Day in 1 .. Days loop
-            Megacorp.World.Campaign.Advance (Globe);
             Megacorp.World.Campaign.Put_Day
-              (Ada.Text_IO.Standard_Output, Globe, Start + Day);
-         end loop;
-         if Save_Len > 0 then
-            Megacorp.Save.Take (Snap, Globe, Start + Days);
+              (Ada.Text_IO.Standard_Output, Globe, Start);
+            for Day in 1 .. Days loop
+               Megacorp.World.Campaign.Advance (Globe);
+               Megacorp.World.Campaign.Put_Day
+                 (Ada.Text_IO.Standard_Output, Globe, Start + Day);
+            end loop;
+            if Save_Len > 0 then
+               Megacorp.Save.Take (Snap, Globe, Start + Days);
+               declare
+                  Root : Megacorp.Data.Virtual_FS.Native.Disk :=
+                    Megacorp.Data.Virtual_FS.Native.Open
+                      (Parent (Save_Path (1 .. Save_Len)));
+               begin
+                  Megacorp.Save.Store
+                    (Root, Base (Save_Path (1 .. Save_Len)), Snap);
+               end;
+            end if;
+         else
             declare
-               Root : Megacorp.Data.Virtual_FS.Native.Disk :=
-                 Megacorp.Data.Virtual_FS.Native.Open
-                   (Parent (Save_Path (1 .. Save_Len)));
+               package Native renames
+                 Megacorp.Data.Virtual_FS.Native;
+               package Journal renames Megacorp.Save.Log;
+               Root : Native.Disk :=
+                 Native.Open (Parent (Log_Path (1 .. Log_Len)));
+               procedure Adopt (Path : String);
+               procedure Fold;
+               procedure Adopt (Path : String) is
+                  Held : constant Native.Disk :=
+                    Native.Open (Parent (Path));
+               begin
+                  Snap := Megacorp.Save.Load (Held, Base (Path));
+                  if Snap.Seed /= Seed then
+                     raise Megacorp.Save.Save_Error
+                       with "seed mismatch";
+                  end if;
+                  Megacorp.Save.Restore (Snap, Globe);
+               end Adopt;
+               procedure Fold is
+               begin
+                  if Save_Len > 0 then
+                     Journal.Compact
+                       (Root,
+                        Base (Save_Path (1 .. Save_Len)),
+                        Base (Log_Path (1 .. Log_Len)),
+                        Snap, Book);
+                  end if;
+                  if Load_Len > 0
+                    and then (Save_Len = 0
+                      or else Load_Path (1 .. Load_Len)
+                        /= Save_Path (1 .. Save_Len))
+                  then
+                     if Save_Len > 0 then
+                        Megacorp.Save.Store
+                          (Root,
+                           Base (Load_Path (1 .. Load_Len)),
+                           Snap);
+                     else
+                        Journal.Compact
+                          (Root,
+                           Base (Load_Path (1 .. Load_Len)),
+                           Base (Log_Path (1 .. Log_Len)),
+                           Snap, Book);
+                     end if;
+                  end if;
+               end Fold;
             begin
-               Megacorp.Save.Store
-                 (Root, Base (Save_Path (1 .. Save_Len)), Snap);
+               if Load_Len > 0 then
+                  Adopt (Load_Path (1 .. Load_Len));
+               elsif Native.Exists
+                 (Root, Base (Save_Path (1 .. Save_Len)))
+               then
+                  Adopt (Save_Path (1 .. Save_Len));
+               else
+                  Snap := Megacorp.Save.Capture
+                    (Globe, 0, Megacorp.Parameters.Auto_Play);
+                  Megacorp.Save.Store
+                    (Root, Base (Save_Path (1 .. Save_Len)), Snap);
+               end if;
+               if Native.Exists
+                 (Root, Base (Log_Path (1 .. Log_Len)))
+               then
+                  Book := Journal.Load
+                    (Root, Base (Log_Path (1 .. Log_Len)));
+                  if Journal.Notice (Book)
+                    = "torn delta record dropped"
+                  then
+                     Journal.Rewrite
+                       (Root,
+                        Base (Log_Path (1 .. Log_Len)),
+                        Snap, Book);
+                  end if;
+                  Journal.Replay (Snap, Globe, Book);
+               else
+                  Book := Journal.Start
+                    (Root,
+                     Base (Log_Path (1 .. Log_Len)),
+                     Snap);
+               end if;
+               Start := Snap.Day;
+               Megacorp.World.Campaign.Put_Day
+                 (Ada.Text_IO.Standard_Output, Globe, Start);
+               for Day in 1 .. Days loop
+                  Journal.Commit
+                    (Root,
+                     Base (Log_Path (1 .. Log_Len)),
+                     Snap, Globe, Book,
+                     Journal.Day_None);
+                  if Journal.Due (Book) then
+                     Fold;
+                  end if;
+                  Megacorp.World.Campaign.Put_Day
+                    (Ada.Text_IO.Standard_Output, Globe, Snap.Day);
+               end loop;
+               if Do_Compact then
+                  Fold;
+               end if;
             end;
          end if;
       exception
@@ -192,6 +328,7 @@ begin
                & " [--world [SEED]]"
                & " [--campaign SEED --days N]"
                & " [--save FILE] [--load FILE]"
+               & " [--log FILE] [--compact]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
          when Error : Megacorp.Save.Save_Error =>
@@ -221,6 +358,8 @@ begin
                "usage: megacorp [--export DIR]"
                & " [--world [SEED]]"
                & " [--campaign SEED --days N]"
+               & " [--save FILE] [--load FILE]"
+               & " [--log FILE] [--compact]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
       end;
@@ -246,6 +385,8 @@ begin
                "usage: megacorp [--export DIR]"
                & " [--world [SEED]]"
                & " [--campaign SEED --days N]"
+               & " [--save FILE] [--load FILE]"
+               & " [--log FILE] [--compact]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
             return;
@@ -264,6 +405,8 @@ begin
                "usage: megacorp [--export DIR]"
                & " [--world [SEED]]"
                & " [--campaign SEED --days N]"
+               & " [--save FILE] [--load FILE]"
+               & " [--log FILE] [--compact]"
                & " [--mission SEED [--ticks N]]");
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
       end;
@@ -278,6 +421,8 @@ begin
          "usage: megacorp [--export DIR]"
          & " [--world [SEED]]"
          & " [--campaign SEED --days N]"
+         & " [--save FILE] [--load FILE]"
+         & " [--log FILE] [--compact]"
          & " [--mission SEED [--ticks N]]");
       Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
    end if;
