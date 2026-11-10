@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.16.0, item 16
+
+`Megacorp.World.Campaign` runs one strategic day. Each non-player corporation collects tax, moves the rate toward a trait target, buys defence on a threatened region, and may spend cash on one neighbouring region. Unrest at 100 hands the region to a neighbour. A corporation with no regions is eliminated and skips later days. `bin/megacorp --campaign SEED --days N` prints the ownership line for each day. The page steps through `campaign.json`.
+
+The border fight is not a city mission. A year of days, twenty times over, cannot tick a generated city for every attack. Power is the cash spent, a trait bonus, and the tech of the attacking border. Hold is the region's defence, its tech, and a flat 40. Higher power takes the region. Seeds 1 through 20, after 365 days, give the most regions to Aggressive 8 times, Secretive 7, Mercantile 4, and Scientific 1. The player corporation does not take these turns, and in all 20 of those years it was eliminated.
+
 ### 2026-11-10 — version 0.15.0, item 15
 
 Ped ids now run to 256 and vehicle ids to 64. The tick walks the people who are actually present, in id order, so the cap does not multiply the cost. A default city holds about 55 people: civilians in the residential blocks, the slums, the industrial strip, and the corporate core, guards at corporate doors, four police beats, and a squad of one to four agents. Eight vehicles are on the roads. Seeds 1 through 50 still all win. The split is 19 briefings, 18 snatches, and 13 contracts, and each of those wins.
@@ -228,6 +234,20 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Page.** `world.json` is seed 42. Each region also has `region-N.json`, the terrain only, so the page can open the city without the mission trace. The World map button draws a nearest-region colouring. A click prints the region's stats and loads that file.
 
+### Item 16 — corporation day
+
+**Who moves.** Corporation 1 is the player and does not choose tax, defence, or attacks. It still collects income, and its regions still gain unrest, so a high tax can lose the home. Corporations 2 and up act in id order. A corporation with no regions is marked eliminated at the start and end of the day and does not act. The alternative was to let the player corporation use its trait as well. Auto-play would then have no passive seat, and the smoke test would not show an elimination that the rule itself produces.
+
+**Money.** Income for a region is population times tax, divided by 1000. Spending is defence, a scientific tech step of 150, and one attack. Nothing else creates or destroys cash. Each corporation stores the running earned and spent totals. The books are cash = opening cash + earned − spent.
+
+**Tax and unrest.** Aggressive aims at tax 12, mercantile at 28, scientific at 16, secretive at 10. The rate moves by one point a day. Unrest above 70 cuts the rate instead. Unrest itself moves by tax/8 minus tech/25, clamped at 0 and 100. At 100 the region joins the neighbouring corporation with the most cash. If it has no foreign neighbour, unrest falls to 70 and tax is capped at 8. A region always has one owner.
+
+**The fight.** Not `Mission.Play`. Attack prices are 600, 400, 350, and 250 for aggressive, mercantile, scientific, and secretive. Defence prices are 150, 250, 200, and 400. The trait bonus on an attack is 80, 20, 40, and 50. Power is the price plus the bonus plus a fifth of the attacker's border tech. Hold is the region's defence plus a fifth of its tech plus 40. Power above hold takes the region and leaves a quarter of the price as the new defence. Otherwise the defender keeps it and adds a fifth of the price to defence. Secretive corporations skip a target whose score is under 80. The score prefers unrest for an aggressive corp, population for a mercantile one, tech for a scientific one, and a low defence for a secretive one. One attack a day, the highest score, and the lowest region id breaks a tie. The turn is a pure function of the atlas, so a repeat does not need another random stream.
+
+**A year.** Seeds 1 through 20, 365 days, all finish. The corporation with the most regions at the end is Aggressive in 8 seeds, Secretive in 7, Mercantile in 4, and Scientific in 1. The player seat is empty in all 20.
+
+**Page.** `campaign.json` is seed 42 for 365 days. The day slider recolours the world map. The older city traces stay.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -238,7 +258,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–15 (version 0.15.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–16 (version 0.16.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -612,7 +632,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 13. **City-block generator.** Done in 0.13.0. From the city seed and the city-map size (default 128×128): ground, a road grid with varied block sizes, districts, building heights, doors, parks, a river with bridges, and sidewalks that pathfinding accepts. `Test_Layout` remains for its unit checks. Depends on: 3, 2, 4, 5. Try: the smoke test, `bin/megacorp` for a text sample of seed 42, and the browser page for seeds 1, 42, and 100. Size: new work, medium-large.
 14. **Block population and mission recipes.** Done in 0.14.0. From the Block and Mission streams: civilians, corporate guards, police beats, parked and moving vehicles, items, and a recipe of objectives, placement, opposition, and a tick cap. `bin/megacorp --mission SEED` plays it. Depends on: 13, 11. Try: the smoke test, `bin/megacorp --mission 42`, and the browser page's Generated trace for seeds 1, 42, and 100. Size: medium.
 15. **World and city generator.** Done in 0.15.0. From the World and Region streams: about 40 named regions, adjacency, a city seed each, and 4 corporations with names, colours, homes, cash, and a trait. The ped cap is 256 and the vehicle cap is 64, with a denser street. Depends on: 2, 13. Try: `bin/megacorp --world 42`, the smoke test, and the browser page's World map. Size: medium.
-16. **Corporation AI hook.** Between missions, seeded territory/research pressure (the idea of `simulate_enemy_moves`, not a port of that routine). Depends on: 15. Try: after a simulated “week”, ownership changes are stable for that seed. Size: small-medium.
+16. **Corporation AI hook.** Done in 0.16.0. One day: non-player corporations tax, spend, attack, and suffer revolts. The fight is a formula. `bin/megacorp --campaign SEED --days N` prints the ownership line. Depends on: 15. Try: `bin/megacorp --campaign 42 --days 30`, the smoke test, and the day slider on the world map. Size: small-medium.
 
 ### Phase D — Persistence
 
