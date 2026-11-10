@@ -6,7 +6,7 @@ with Megacorp.RNG;
 
 --  Item 15. One persistent world: regions, corporations, and
 --  the roads between regions. Counts come from the generator
---  parameters. Item 16 will move territory after a mission.
+--  parameters. Item 16 advances this atlas one day at a time.
 package Megacorp.World is
    Max_Name  : constant := 24;
    Max_Links : constant := 2048;
@@ -25,9 +25,12 @@ package Megacorp.World is
       Red   : Natural := 0;
       Green : Natural := 0;
       Blue  : Natural := 0;
-      Home  : Positive := 1;
-      Cash  : Natural := 0;
-      Kind  : Trait := Mercantile;
+      Home       : Positive := 1;
+      Cash       : Natural := 0;
+      Kind       : Trait := Mercantile;
+      Eliminated : Boolean := False;
+      Earned     : Natural := 0;
+      Spent      : Natural := 0;
    end record;
 
    type Region is record
@@ -37,6 +40,7 @@ package Megacorp.World is
       Tax        : Natural := 0;
       Unrest     : Natural := 0;
       Owner      : Positive := 1;
+      Defence    : Natural := 0;
       City       : RNG.Word := 0;
       X          : Natural := 0;
       Y          : Natural := 0;

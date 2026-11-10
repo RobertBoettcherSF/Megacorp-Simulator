@@ -16,6 +16,7 @@ with Megacorp.Data.Virtual_FS.Native;
 with Megacorp.Path;
 with Megacorp.Peds;
 with Megacorp.World;
+with Megacorp.World.Campaign;
 with Megacorp.World.Gen;
 
 package body Megacorp.Map is
@@ -2021,6 +2022,9 @@ package body Megacorp.Map is
            World.Gen.Generate (42, Parameters.Defaults);
       begin
          World.Gen.Write (Folder & "/world.json", Globe, Version);
+         World.Campaign.Write
+           (Folder & "/campaign.json", 42, Parameters.Defaults,
+            365, Version);
          for I in 1 .. Globe.Regions loop
             declare
                Region_City : constant City :=

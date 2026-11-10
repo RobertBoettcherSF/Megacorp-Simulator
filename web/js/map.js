@@ -582,7 +582,18 @@ function nearestPrepared(x, y) {
 }
 
 let worldData = null;
+let campaignData = null;
+let campaignDay = 0;
 let showWorld = false;
+
+function ownerId(region, index) {
+  const frame = campaignData && campaignData.frames
+    && campaignData.frames[campaignDay];
+  if (frame && frame.owner && frame.owner[index] != null) {
+    return frame.owner[index];
+  }
+  return region.owner;
+}
 
 function regionPoint(region, width, height) {
   let maxX = 1;
@@ -621,7 +632,8 @@ function drawWorld() {
   for (let y = 0; y < canvas.height; y += 1) {
     for (let x = 0; x < canvas.width; x += 1) {
       const region = nearestRegion(x, y, canvas.width, canvas.height);
-      const owner = worldData.corporations.find((corp) => corp.id === region.owner);
+      const owner = worldData.corporations.find(
+        (corp) => corp.id === ownerId(region, worldData.regions.indexOf(region)));
       const match = (owner && owner.colour.match(/#(..)(..)(..)/))
         || ["", "33", "33", "33"];
       const pixel = (y * canvas.width + x) * 4;
@@ -959,7 +971,9 @@ async function main() {
     if (showWorld && worldData) {
       const point = canvasPoint(event);
       const region = nearestRegion(point.x, point.y, canvas.width, canvas.height);
-      const owner = worldData.corporations.find((corp) => corp.id === region.owner);
+      const owner = worldData.corporations.find(
+        (corp) => corp.id === ownerId(
+          region, worldData.regions.indexOf(region)));
       document.getElementById("path-status").textContent =
         `${region.name}: ${owner ? owner.name : "unclaimed"}`
         + ` · pop ${region.population}k · tech ${region.tech}`
@@ -999,6 +1013,30 @@ async function main() {
     }
   } catch (err) {
     worldData = null;
+  }
+  try {
+    const campaignResponse = await fetch("data/campaign.json");
+    if (campaignResponse.ok) {
+      campaignData = await campaignResponse.json();
+      const slider = document.getElementById("day");
+      slider.max = String(campaignData.days || 0);
+      slider.addEventListener("input", () => {
+        campaignDay = Number(slider.value);
+        document.getElementById("day-label").textContent =
+          String(campaignDay);
+        if (showWorld) {
+          const frame = campaignData.frames[campaignDay];
+          const cash = frame && frame.cash
+            ? frame.cash.map((value, index) => `${index + 1}:${value}`).join(" ")
+            : "";
+          document.getElementById("path-status").textContent =
+            `Day ${campaignDay} cash ${cash}`;
+          draw();
+        }
+      });
+    }
+  } catch (err) {
+    campaignData = null;
   }
   await loadFile(index.maps[select.selectedIndex].file);
 }

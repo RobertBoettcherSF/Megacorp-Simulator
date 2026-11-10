@@ -12,6 +12,7 @@ with Megacorp.Mission;
 with Megacorp.Mission.Gen;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
+with Megacorp.World.Campaign;
 with Megacorp.World.Gen;
 with Megacorp.Assets.Placeholder;
 with Megacorp.Data.Virtual_FS.Native;
@@ -46,9 +47,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.15.0"
+     (Megacorp.Version = "0.16.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.15.0");
+      "version 0.16.0");
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
       and then Params.Region_Count (Defaults) = 40
@@ -491,6 +492,59 @@ begin
         (Globe.Same (Home, Again)
          and then not Globe.Same (Home, Other),
          "world follows the seed");
+   end;
+
+   declare
+      package Camp renames Megacorp.World.Campaign;
+      package Globe renames Megacorp.World.Gen;
+
+      function Owners (Item : Megacorp.World.Atlas) return Boolean;
+      function Owners (Item : Megacorp.World.Atlas) return Boolean is
+         Total : Natural := 0;
+      begin
+         for C in 1 .. Item.Corps loop
+            Total := Total + Camp.Holdings (Item, C);
+         end loop;
+         return Total = Item.Regions and then Camp.Coherent (Item);
+      end Owners;
+
+      Opened : constant Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Once : Megacorp.World.Atlas := Opened;
+      Twice : Megacorp.World.Atlas := Opened;
+      Gone : Megacorp.World.Atlas := Opened;
+      Year : Megacorp.World.Atlas;
+      Steady : Boolean := True;
+   begin
+      Camp.Run (Once, 30);
+      Camp.Run (Twice, 30);
+      for I in 1 .. Gone.Regions loop
+         if Gone.Area (I).Owner = 4 then
+            Gone.Area (I).Owner := 2;
+         end if;
+      end loop;
+      Camp.Advance (Gone);
+      for Seed in 1 .. 20 loop
+         Year := Globe.Generate (RNG.Word (Seed), Defaults);
+         Camp.Run (Year, 365);
+         Steady := Steady
+           and then Camp.Coherent (Year)
+           and then Camp.Books_Balance
+             (Globe.Generate (RNG.Word (Seed), Defaults), Year);
+      end loop;
+      Smoke_Check.Expect
+        (Camp.Books_Balance (Opened, Once)
+         and then Camp.Coherent (Once)
+         and then Once.Company (1).Cash = Twice.Company (1).Cash
+         and then Once.Area (1).Owner = Twice.Area (1).Owner
+         and then Once.Company (3).Spent = Twice.Company (3).Spent,
+         "campaign books repeat");
+      Smoke_Check.Expect
+        (Gone.Company (4).Eliminated
+         and then Camp.Holdings (Gone, 4) = 0
+         and then Owners (Once)
+         and then Steady,
+         "empty corporations are eliminated");
    end;
 
    declare
