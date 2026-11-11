@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.22.0, item 22
+
+The page ticks a generated 128 by 128 city inside the wasm module. `requestAnimationFrame` accumulates time and calls `megacorp_play` with a whole number of 33 ms steps, so the simulation does not depend on the frame rate. Pause, 1x, 2x, and 4x scale that accumulator. Pointer and key events are five integers. Ada selects a person, orders a walk, pans, and zooms. A touch drag pans and a pinch zooms. The city is drawn beside the world map, with the people and the cars moving. Each command and each batch of ticks is a line in the delta log. Replaying that log reproduces the city digest.
+
 ### 2026-11-10 — version 0.21.0, item 21
 
 The browser file backend is `Virtual_FS.Browser`. The wasm module writes the version-2 snapshot `slot.mgc` and the delta log `slot.log` through it, and reads them back on `megacorp_boot`. A reload continues that day. New world calls `megacorp_reset` and replaces both files. The page stores the bytes in the Origin Private File System. If that directory cannot be opened, it uses IndexedDB. The two save files are also mirrored in localStorage, because a synchronous OPFS access handle is only available on a worker and the module runs on the main thread. A chosen tileset or sprite is copied into the module and stored at `assets/<name>` only when `Megacorp.Assets.Import` accepts it: a PNG signature, or JSON that names `tile_width` and `tiles`.
@@ -344,6 +348,16 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **What an import may be.** The page copies the chosen file into a 64 KB buffer and passes the name to `megacorp_commit_asset`. Ada accepts `.png` only when the first eight bytes are the PNG signature, and `.json` only when the text contains both `tile_width` and `tiles`. The stored name is `assets/` plus the basename, and that path has to be a logical path. Anything else returns 0. The page says Import refused and does not store the file. JavaScript does not decide the format.
 
+### Item 22 — input and the city tick
+
+**Fixed step.** One city tick is one call of `Play.Run`. The page adds frame time, times 1, 2, or 4, into an accumulator and spends it in steps of 33 ms. Pause adds nothing. A frame never asks for more than 8 ticks, so a stalled tab does not fast-forward a whole minute. The tick itself does not read the clock. Two runs with the same commands and the same tick count match, whatever the frame rate was.
+
+**Commands are numbers.** JavaScript forwards a tap, a mouse drag, a touch drag, a pinch, or a key as a code and five integers. It does not decide what they mean. Code 1 selects the person on that tile, or, if the tile is empty and someone is selected, queues a walk. Code 2 replaces the selection with everyone inside the box. Code 5 pans by the drag. Code 4 pans and changes the zoom by one step. Arrow keys pan by two tiles. Minus and plus change the zoom. The walk starts on the next tick, which is the same rule the action queue already uses. Key repeat is dropped in the page so a held arrow is one command.
+
+**The city.** `Map.Gen` builds the 128 by 128 map from the player's home city seed. Six people stand on pavement. Two cars drive between road tiles. The wasm compiler could not instantiate a vector inside `Map.Gen`'s connectivity search, so that search uses an array. The native result is the same breadth-first walk. The pathfinder no longer has an `others` handler: the wasm runtime rejects it, and the successful search already frees its nodes.
+
+**The log.** `order` and `ticks` are delta-log lines. `Commit` applies them, so a replay is the same calls in the same order. The city digest mixes the tick, the camera, and every person and car. When the log is folded, the current city is written to `city.mgc` first, and the next load reads that file before replaying the lines that came after. A new world replaces both.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -354,7 +368,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–21 (version 0.21.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–22 (version 0.22.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -740,7 +754,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 20. **WASM toolchain spike.** Done in 0.20.0. AdaWebPack 22.1.0 llvm-gnat emits the world core as `web/megacorp.wasm`. The page calls `megacorp_init` and `megacorp_step` and draws the live map. Seed 42 matches the native engine check. Depends on: 1, 15, 16. Try: open `web/index.html`; the header says `engine: wasm` and the day counter moves. `node megacorp/wasm/check.mjs` compares the module with `bin/megacorp --engine-check`. Size: spike.
 21. **Browser storage.** Done in 0.21.0. The wasm module reads and writes `slot.mgc` and `slot.log` through `Virtual_FS.Browser`. The page uses OPFS, IndexedDB when OPFS cannot be opened, and a localStorage mirror of the two save files. Reload continues the saved day. New world resets it. A chosen tileset or sprite is stored only after `Megacorp.Assets.Import` accepts it. Depends on: 4, 17, 20. Try: open `web/index.html`, let the day move, reload, and see the same day; New world starts again. Size: medium (JS + Host bindings).
-22. **Input and tick in the page.** Pointer/keyboard → API; fixed-step ticks; framebuffer (or display list) each frame. Depends on: 20, 11. Try: walk a ped around a generated block with the keyboard. Size: medium.
+22. **Input and tick in the page.** Done in 0.22.0. The wasm module ticks a 128 by 128 city. The page accumulates animation frames into fixed steps and offers Pause, 1x, 2x, and 4x. Pointer and key events are a command queue. Ada selects, orders a walk, and pans or zooms. Commands and tick batches are delta-log lines, and a replay matches the city digest. Depends on: 20, 11, 13. Try: open `web/index.html`, tap a person, tap a tile, and watch them walk. Speed changes how fast the sim counter moves. Size: medium.
 23. **Playable first mission.** A generated block, at least one complete-able objective, shooting and movement, success/fail screen, then a save. Depends on: 14, 22, 17. Try: generate seed 42, finish the mission in the browser, reload, see the outcome and any destruction persist. Size: integration; this is the first “it feels like a game” milestone. Rough logic already built in B–D; UI glue is the added work.
 
 ### Phase F — Campaign layer and audio

@@ -64,6 +64,14 @@ package Megacorp.Save.Log is
        Region <= Snap.Regions and then Region <= Item.Regions
        and then Snap.Seed = Item.Seed;
 
+   --  A city command. Code, then five integers. See Play.Handle.
+   function Order
+     (Code, A, B, C, D, E : Integer) return Event;
+
+   --  Count city ticks. The page batches a frame into one record.
+   function Ticks (Count : Positive) return Event
+     with Pre => Count <= 32;
+
    function Start
      (Disk : in out Data.Virtual_FS.Backend'Class;
       Path : String;
@@ -127,7 +135,9 @@ private
       Kind_Mission,
       Kind_Tile,
       Kind_Squad,
-      Kind_Reroll);
+      Kind_Reroll,
+      Kind_Order,
+      Kind_Ticks);
 
    type Event is record
       Kind    : Event_Kind := Kind_Day;
@@ -151,6 +161,12 @@ private
       Health  : Natural := 100;
       Ammo    : Natural := 12;
       City    : RNG.Word := 0;
+      Code    : Integer := 0;
+      A       : Integer := 0;
+      B       : Integer := 0;
+      C       : Integer := 0;
+      D       : Integer := 0;
+      E       : Integer := 0;
    end record;
 
    type Event_List is array (1 .. Max_Events) of Event;

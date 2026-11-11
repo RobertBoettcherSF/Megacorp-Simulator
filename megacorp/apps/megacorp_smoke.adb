@@ -30,6 +30,7 @@ with Megacorp.Save.Log;
 with Megacorp.Save.Migrate;
 with Megacorp.API;
 with Megacorp.Assets.Import;
+with Megacorp.Play;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -54,9 +55,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.21.0"
+     (Megacorp.Version = "0.22.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.21.0");
+      "version 0.22.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -93,6 +94,75 @@ begin
          and then not Megacorp.Assets.Import.Accepts
            ("sprite.png", "PNG"),
          "imported assets are checked");
+   end;
+   Ada.Directories.Create_Path ("/tmp/megacorp-play");
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Globe renames Megacorp.World.Gen;
+      Root : Native.Disk :=
+        Native.Open ("/tmp/megacorp-play");
+      World : Megacorp.World.Atlas;
+      Home : Positive;
+      City : Megacorp.RNG.Word;
+      Snap : Megacorp.Save.Snapshot;
+      Book : Megacorp.Save.Log.Journal;
+      Start_X : Positive;
+      Start_Y : Positive;
+      End_X : Positive;
+      End_Y : Positive;
+      Goal : Megacorp.Map.Point;
+      First : Megacorp.RNG.Word;
+      Again : Megacorp.RNG.Word;
+   begin
+      World := Globe.Generate (42, Defaults);
+      Home := World.Company (1).Home;
+      City := World.Area (Home).City;
+      Megacorp.Play.Open (City);
+      Start_X := Megacorp.Play.Actor_X (1);
+      Start_Y := Megacorp.Play.Actor_Y (1);
+      Goal := Megacorp.Play.Goal_Near (1);
+      Snap := Megacorp.Save.Capture
+        (World, 0, Megacorp.Parameters.Auto_Play);
+      Book := Megacorp.Save.Log.Start (Root, "slot.log", Snap);
+      Megacorp.Save.Log.Commit
+        (Root, "slot.log", Snap, World, Book,
+         Megacorp.Save.Log.Order
+           (1,
+            Megacorp.Play.Pixel_X (Start_X),
+            Megacorp.Play.Pixel_Y (Start_Y),
+            0, 0, 0));
+      Megacorp.Save.Log.Commit
+        (Root, "slot.log", Snap, World, Book,
+         Megacorp.Save.Log.Order
+           (1,
+            Megacorp.Play.Pixel_X (Goal.X),
+            Megacorp.Play.Pixel_Y (Goal.Y),
+            0, 0, 0));
+      Megacorp.Save.Log.Commit
+        (Root, "slot.log", Snap, World, Book,
+         Megacorp.Save.Log.Ticks (24));
+      Smoke_Check.Expect
+        (Megacorp.Play.Clock = 24
+         and then (Megacorp.Play.Actor_X (1) /= Start_X
+                   or else Megacorp.Play.Actor_Y (1) /= Start_Y),
+         "a move order walks the selected ped");
+      End_X := Megacorp.Play.Actor_X (1);
+      End_Y := Megacorp.Play.Actor_Y (1);
+      First := Megacorp.Play.Digest;
+      Megacorp.Play.Write (Root, "city.mgc");
+      Megacorp.Play.Open (City);
+      Smoke_Check.Expect
+        (Megacorp.Play.Read (Root, "city.mgc")
+         and then Megacorp.Play.Clock = 24
+         and then Megacorp.Play.Actor_X (1) = End_X
+         and then Megacorp.Play.Actor_Y (1) = End_Y,
+         "a city checkpoint reloads");
+      Megacorp.Play.Open (City);
+      Megacorp.Save.Log.Replay (Snap, World, Book);
+      Again := Megacorp.Play.Digest;
+      Smoke_Check.Expect
+        (Again = First,
+         "a replayed command sequence gives the same digest");
    end;
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4

@@ -40,6 +40,7 @@ set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-strunb.adb"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-contai.ads"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-coinve.ads"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-convec.adb"
 "$gcc" "$@" "$root/wasm/runtime/megacorp-host.adb"
 "$gcc" "$@" "$root/src/megacorp.adb"
 "$gcc" "$@" "$root/src/megacorp-parameters.adb"
@@ -53,6 +54,12 @@ set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
 "$gcc" "$@" "$root/src/megacorp-data-virtual_fs-browser.adb"
 "$gcc" "$@" "$root/src/megacorp-assets-import.adb"
 "$gcc" "$@" "$root/wasm/runtime/megacorp-map.adb"
+"$gcc" "$@" "$root/src/megacorp-weapons.adb"
+"$gcc" "$@" "$root/src/megacorp-path.adb"
+"$gcc" "$@" "$root/src/megacorp-peds.adb"
+"$gcc" "$@" "$root/src/megacorp-vehicles.adb"
+"$gcc" "$@" "$root/src/megacorp-map-gen.adb"
+"$gcc" "$@" "$root/src/megacorp-play.adb"
 "$gcc" "$@" "$root/src/megacorp-save.adb"
 "$gcc" "$@" "$root/src/megacorp-save-migrate.adb"
 "$gcc" "$@" "$root/src/megacorp-save-log.adb"
@@ -70,17 +77,21 @@ wasm-ld --no-entry --export-memory --allow-undefined \
    --export=megacorp_reset \
    --export=megacorp_import_buffer --export=megacorp_import_capacity \
    --export=megacorp_commit_asset \
+   --export=megacorp_command --export=megacorp_play \
+   --export=megacorp_city --export=megacorp_city_size \
    --export=megacorp_state --export=megacorp_state_size \
-   -z stack-size=1048576 \
+   -z stack-size=2097152 \
    megacorp_wasm.o b~megacorp_wasm.o \
    megacorp.o megacorp-host.o megacorp-parameters.o megacorp-rng.o \
    megacorp-world.o megacorp-world-gen.o megacorp-world-campaign.o \
-   megacorp-map.o \
+   megacorp-map.o megacorp-map-gen.o \
+   megacorp-weapons.o megacorp-path.o megacorp-peds.o \
+   megacorp-vehicles.o megacorp-play.o \
    megacorp-data-virtual_fs.o megacorp-data-virtual_fs-browser.o \
    megacorp-assets-import.o \
    megacorp-save.o megacorp-save-migrate.o megacorp-save-log.o \
    megacorp-api.o megacorp-wasm_store.o \
-   a-chahan.o a-textio.o a-strunb.o s-exctab.o gnat_stub.o \
+   a-chahan.o a-textio.o a-strunb.o a-convec.o s-exctab.o gnat_stub.o \
    "$tool/lib/rts-native/adalib/libgnat.a" \
    -o "$repo/web/megacorp.wasm"
 echo "wrote $repo/web/megacorp.wasm"

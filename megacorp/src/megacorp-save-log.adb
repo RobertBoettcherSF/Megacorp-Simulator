@@ -3,6 +3,7 @@
 
 with Megacorp.Host;
 with Megacorp.Parameters;
+with Megacorp.Play;
 with Megacorp.World.Campaign;
 
 package body Megacorp.Save.Log is
@@ -246,6 +247,15 @@ package body Megacorp.Save.Log is
          when Kind_Reroll =>
             return "reroll " & Trim (Ev.Region)
               & " " & Trim_Word (Ev.City);
+         when Kind_Order =>
+            return "order " & Trim (Ev.Code)
+              & " " & Trim (Ev.A)
+              & " " & Trim (Ev.B)
+              & " " & Trim (Ev.C)
+              & " " & Trim (Ev.D)
+              & " " & Trim (Ev.E);
+         when Kind_Ticks =>
+            return "ticks " & Trim (Ev.Code);
       end case;
    end Wording;
 
@@ -328,6 +338,20 @@ package body Megacorp.Save.Log is
          Ev.Region := Positive'Value (Field (Payload, 2));
          Ev.City := RNG.Word'Value (Field (Payload, 3));
          return True;
+      elsif Kind = "order" then
+         Ev.Kind := Kind_Order;
+         Ev.Code := Integer'Value (Field (Payload, 2));
+         Ev.A := Integer'Value (Field (Payload, 3));
+         Ev.B := Integer'Value (Field (Payload, 4));
+         Ev.C := Integer'Value (Field (Payload, 5));
+         Ev.D := Integer'Value (Field (Payload, 6));
+         Ev.E := Integer'Value (Field (Payload, 7));
+         return Field (Payload, 8)'Length = 0;
+      elsif Kind = "ticks" then
+         Ev.Kind := Kind_Ticks;
+         Ev.Code := Integer'Value (Field (Payload, 2));
+         return Ev.Code > 0 and then Ev.Code <= 32
+           and then Field (Payload, 3)'Length = 0;
       end if;
       return False;
    exception
@@ -397,6 +421,12 @@ package body Megacorp.Save.Log is
                raise Save_Error with "not a Megacorp delta";
             end if;
             Refuse (Snap, Ev.Region);
+         when Kind_Order =>
+            null;
+         when Kind_Ticks =>
+            if Ev.Code < 1 or else Ev.Code > 32 then
+               raise Save_Error with "not a Megacorp delta";
+            end if;
       end case;
    end Guard;
 
@@ -460,6 +490,10 @@ package body Megacorp.Save.Log is
             Item.Area (Ev.Region).City := Ev.City;
             Snap.Area (Ev.Region).Has_City := True;
             Snap.Area (Ev.Region).City := Ev.City;
+         when Kind_Order =>
+            Play.Handle (Ev.Code, Ev.A, Ev.B, Ev.C, Ev.D, Ev.E);
+         when Kind_Ticks =>
+            Play.Run (Positive (Ev.Code));
       end case;
    end Apply;
 
@@ -584,6 +618,26 @@ package body Megacorp.Save.Log is
          City => Next,
          others => <>);
    end Reroll;
+
+   function Order
+     (Code, A, B, C, D, E : Integer) return Event
+   is
+   begin
+      return
+        (Kind => Kind_Order,
+         Code => Code,
+         A => A,
+         B => B,
+         C => C,
+         D => D,
+         E => E,
+         others => <>);
+   end Order;
+
+   function Ticks (Count : Positive) return Event is
+   begin
+      return (Kind => Kind_Ticks, Code => Count, others => <>);
+   end Ticks;
 
    function Start
      (Disk : in out Data.Virtual_FS.Backend'Class;

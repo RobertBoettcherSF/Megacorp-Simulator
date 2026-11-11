@@ -19,36 +19,57 @@ package body Megacorp.Map is
       return M.Cell (X, Y);
    end Tile_At;
 
+   type Delta_XY is record
+      DX : Integer;
+      DY : Integer;
+   end record;
+
+   Four_Step : constant array (Four_Way) of Delta_XY :=
+     (North => (DX => 0, DY => -1),
+      East  => (DX => 1, DY => 0),
+      South => (DX => 0, DY => 1),
+      West  => (DX => -1, DY => 0));
+
+   Eight_Step : constant array (Eight_Way) of Delta_XY :=
+     (North => (DX => 0, DY => -1),
+      East => (DX => 1, DY => 0),
+      South => (DX => 0, DY => 1),
+      West => (DX => -1, DY => 0),
+      North_East => (DX => 1, DY => -1),
+      South_East => (DX => 1, DY => 1),
+      South_West => (DX => -1, DY => 1),
+      North_West => (DX => -1, DY => -1));
+
    function Has_Neighbour_4
      (M : City; X, Y : Integer; Dir : Four_Way) return Boolean
    is
-      pragma Unreferenced (M, X, Y, Dir);
+      Step : constant Delta_XY := Four_Step (Dir);
    begin
-      return False;
+      return In_Bounds (M, X + Step.DX, Y + Step.DY);
    end Has_Neighbour_4;
 
    function Neighbour_4
      (M : City; X, Y : Integer; Dir : Four_Way) return Point
    is
-      pragma Unreferenced (M, Dir);
+      Step : constant Delta_XY := Four_Step (Dir);
    begin
-      return (X => X, Y => Y);
+      return (X => X + Step.DX, Y => Y + Step.DY);
    end Neighbour_4;
 
    function Has_Neighbour_8
      (M : City; X, Y : Integer; Dir : Eight_Way) return Boolean
    is
-      pragma Unreferenced (M, X, Y, Dir);
+      Step : constant Delta_XY := Eight_Step (Dir);
    begin
-      return False;
+      return In_Bounds (M, X + Step.DX, Y + Step.DY);
    end Has_Neighbour_8;
 
    function Neighbour_8
      (M : City; X, Y : Integer; Dir : Eight_Way) return Point
    is
-      pragma Unreferenced (M, Dir);
+      Step : constant Delta_XY := Eight_Step (Dir);
    begin
-      return (X => X, Y => Y);
+      return (X => X + Step.DX, Y => Y + Step.DY);
    end Neighbour_8;
 
    function Blank (Width, Height : Positive) return City is

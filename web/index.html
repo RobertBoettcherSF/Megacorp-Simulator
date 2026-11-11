@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.21.0</title>
+  <title>Megacorp Simulator 0.22.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -64,20 +64,23 @@
       font-size: 0.92rem;
     }
     #stage {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
       margin: 0 1.2rem 1rem;
       overflow: auto;
       max-height: 75vh;
-      border: 1px solid var(--line);
-      background: #101216;
     }
-    canvas { display: block; image-rendering: pixelated; }
+    canvas { display: block; image-rendering: pixelated; background: #101216; border: 1px solid var(--line); }
+    #city { touch-action: none; }
+    button[aria-pressed="true"] { outline: 2px solid #e7e4dc; }
     .note { color: var(--muted); margin-top: 0; }
   </style>
 </head>
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.21.0</span>
+    <p class="meta">version <span id="version">0.22.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -96,6 +99,11 @@
     <button id="view" type="button">Flat view</button>
     <button id="world" type="button">World map</button>
     <button id="new-world" type="button">New world</button>
+    <button id="sim-pause" type="button">Pause</button>
+    <button id="sim-1" type="button" aria-pressed="true">1x</button>
+    <button id="sim-2" type="button">2x</button>
+    <button id="sim-4" type="button">4x</button>
+    <span>Sim <span id="sim-tick">0</span></span>
     <label>Import
       <input id="import-asset" type="file" accept=".json,.png,application/json,image/png">
     </label>
@@ -113,7 +121,10 @@
   </div>
   <p id="path-status" class="readout">Paths and ped motion are precomputed by Ada.</p>
   <p id="hover" class="readout">Hover a tile.</p>
-  <div id="stage"><canvas id="map"></canvas></div>
+  <div id="stage">
+    <canvas id="city" width="480" height="480"></canvas>
+    <canvas id="map"></canvas>
+  </div>
   <p class="note">Paths, ped motion, action queues, shots, and vehicles are
     precomputed by Ada. Play, pause, and step replay that trace.
     The marker is the ped and the stroke is its facing. A bar above
@@ -129,8 +140,12 @@
     module in the browser when it loads, and the day counter moves.
     Reload continues that day. New world starts again. Import stores
     a tileset or sprite only after the Ada module accepts it.
+    The city beside the world map is ticked by Ada. Pause, 1x, 2x,
+    and 4x change how fast those ticks run. Tap a person, then tap
+    a tile, to send them walking.
     A click on a region opens that city's precomputed trace.</p>
-  <script src="js/store.js"></script>
-  <script src="js/map.js"></script>
+  <script src="js/store.js?v=022"></script>
+  <script src="js/play.js?v=022"></script>
+  <script src="js/map.js?v=022"></script>
 </body>
 </html>

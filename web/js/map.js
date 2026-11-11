@@ -1192,6 +1192,9 @@ async function main() {
     showWorld = true;
     document.getElementById("world").textContent = "City";
     document.getElementById("hover").textContent = "Hover a region.";
+    if (typeof MegacorpPlay !== "undefined") {
+      MegacorpPlay.start(wasmExports);
+    }
     showWasmDay();
     draw();
     document.getElementById("new-world").addEventListener("click", () => {

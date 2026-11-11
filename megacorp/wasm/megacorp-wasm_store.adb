@@ -6,6 +6,7 @@ with Megacorp.Assets.Import;
 with Megacorp.Data.Virtual_FS;
 with Megacorp.Data.Virtual_FS.Browser;
 with Megacorp.Parameters;
+with Megacorp.Play;
 with Megacorp.RNG;
 with Megacorp.Save;
 with Megacorp.Save.Log;
@@ -24,7 +25,35 @@ package body Megacorp.Wasm_Store is
    Import_Buf : array (1 .. Cap) of Octet := (others => 0);
 
    procedure Fresh (Seed : Interfaces.Unsigned_32);
+   procedure Note (Ev : Save.Log.Event);
+   procedure Open_City;
    function Base_Name (Name : String) return String;
+
+   procedure Open_City is
+      Home : constant Positive := Globe.Company (1).Home;
+      Kept : Boolean;
+   begin
+      Play.Open (Globe.Area (Home).City);
+      if Host_Files.Exists (Files, "city.mgc") then
+         Kept := Play.Read (Files, "city.mgc");
+         if not Kept then
+            Play.Open (Globe.Area (Home).City);
+         end if;
+      end if;
+   end Open_City;
+
+   procedure Note (Ev : Save.Log.Event) is
+   begin
+      Save.Log.Commit
+        (Files, "slot.log", Snap, Globe, Book, Ev);
+      if Save.Log.Due (Book) then
+         if Play.Ready then
+            Play.Write (Files, "city.mgc");
+         end if;
+         Save.Log.Compact
+           (Files, "slot.mgc", "slot.log", Snap, Book);
+      end if;
+   end Note;
 
    procedure Fresh (Seed : Interfaces.Unsigned_32) is
    begin
@@ -34,6 +63,8 @@ package body Megacorp.Wasm_Store is
         (Globe, 0, Parameters.Auto_Play);
       Save.Store (Files, "slot.mgc", Snap);
       Book := Save.Log.Start (Files, "slot.log", Snap);
+      Play.Open (Globe.Area (Globe.Company (1).Home).City);
+      Play.Write (Files, "city.mgc");
       API.Install (Globe, Snap.Day);
    end Fresh;
 
@@ -43,6 +74,7 @@ package body Megacorp.Wasm_Store is
          begin
             Snap := Save.Load (Files, "slot.mgc");
             Globe := Save.Rebuild (Snap, Parameters.Defaults);
+            Open_City;
             if Host_Files.Exists (Files, "slot.log") then
                Book := Save.Log.Load (Files, "slot.log");
                Save.Log.Replay (Snap, Globe, Book);
@@ -62,12 +94,7 @@ package body Megacorp.Wasm_Store is
    procedure Advance (Days : Interfaces.Unsigned_32) is
    begin
       for Drop in 1 .. Natural (Days) loop
-         Save.Log.Commit
-           (Files, "slot.log", Snap, Globe, Book, Save.Log.Day_None);
-         if Save.Log.Due (Book) then
-            Save.Log.Compact
-              (Files, "slot.mgc", "slot.log", Snap, Book);
-         end if;
+         Note (Save.Log.Day_None);
       end loop;
       API.Install (Globe, Snap.Day);
    end Advance;
@@ -127,4 +154,28 @@ package body Megacorp.Wasm_Store is
          return 1;
       end;
    end Commit_Asset;
+
+   procedure Command (Code, A, B, C, D, E : Integer) is
+   begin
+      Note (Save.Log.Order (Code, A, B, C, D, E));
+   end Command;
+
+   procedure Play_Ticks (Count : Interfaces.Unsigned_32) is
+      use type Interfaces.Unsigned_32;
+   begin
+      if Count < 1 or else Count > 32 then
+         return;
+      end if;
+      Note (Save.Log.Ticks (Positive (Count)));
+   end Play_Ticks;
+
+   function City_State return System.Address is
+   begin
+      return Play.City_State;
+   end City_State;
+
+   function City_State_Size return Interfaces.Unsigned_32 is
+   begin
+      return Play.City_State_Size;
+   end City_State_Size;
 end Megacorp.Wasm_Store;
