@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.28.0, item 28
+
+The purse is tuned so a moderate seed 42 game stays solvent, and the chosen numbers are in "Balance" below. A first visit shows five short tips. Buttons share one size, phone type is larger, and controls have titles. The page says it is loading until the module answers, and a failed module leaves the exported maps with a message. A save that is missing or not a Megacorp file stays on the title and offers New game. The city view no longer redraws the strategic map on every frame. The root README, this log's morning-review index, and `CHANGELOG.md` close the night.
+
 ### 2026-11-11 — version 0.27.0, item 27
 
 Gunfire, hits, deaths, occasional footsteps, UI clicks, win and loss stingers, a police alarm, and a border-fight blip are event codes chosen in Ada. The page plays them with oscillators and noise from parameter tables Ada also writes. Each of the title, the map, and the city has a short generated loop. Master, effects, and music volumes are real and are stored with the other settings. Audio starts on the first tap or key, and a hidden tab is silent.
@@ -10,9 +14,19 @@ Gunfire, hits, deaths, occasional footsteps, UI clicks, win and loss stingers, a
 
 The page opens on a title screen. New game offers three fixed-seed scenarios, which lock the world, or free play with a typed or rolled seed. Continue appears when a save exists. Settings stores a speed default and a sound-volume placeholder. Credits name the MIT sources and the AdaWebPack runtime exception. A region opens a briefing (objective, enemy estimate, reward, squad and loadout) with Start and Cancel. After the mission, a debrief shows the outcome, casualties, loot, and the purse before and after, then returns to the map. Pause can resume, save, or quit to the title. The screen is decided in Ada. JavaScript draws it, and the same actions work from the keyboard, the mouse, and a touch.
 
-## Balance (for item 28)
+## Balance (chosen in 0.28.0)
 
-- Seed 42 with a research grant of 40 ends day 30 at funds -1484. Two starting agents and that grant outrun the income of the starting region, so a new player goes broke too easily.
+Item 25 left seed 42, grant 40, two agents, and no missions at funds −1484 on day 30. The atlas income formula is unchanged, because corporation cash is inside the world digest. The player's purse now collects four times that formula. A migrated version 2 file receives the same opening funds as a new game.
+
+- Opening funds: 2400 (was 1500).
+- Hire price: 400. The roster still stops at six.
+- Upkeep: 10 per living agent per day (was 30).
+- Research grant: 0, 40, or 80. A moderate game uses 40.
+- A win pays 1200 plus that region's unscaled income (was 250 plus the same income).
+- Seed 42, grant 40, two agents, no missions, 30 days: funds 664. The ledger digest is `5fba447fa43a5941`. Research is 1200.
+- The same start, with a win on day 12 and a win on day 36, each taking one region from a corporation that still holds another: funds 1278 after 60 days. The smoke test accepts 400 through 8000.
+- Debt still happens. Filling the roster and setting the grant to 80, then playing 40 days, leaves the purse negative and refuses a hire.
+- Seed 42 day 0 stays `cf28d9973a3bfe65`. Day 10 stays `d315dcd67089b6e9`.
 
 ### 2026-11-11 — version 0.25.0, item 25
 
@@ -422,6 +436,53 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **The page only plays.** Each code has a wave, a frequency, a length, an attack, and a gain, written by Ada. Loops for the title, the map, and the city are eight notes from a formula, not a sample file. There are no external audio files. Master, effects, and music are separate levels in the same prefs file as the speed. The audio context starts on the first pointer or key, which is what iOS Safari requires, and the master gain goes to zero while the tab is hidden.
 
+### Item 28 — balance, polish, and the morning review
+
+**The purse, not the atlas.** Multiplying `World.Campaign.Income` would have moved every corporation's cash and the world digest. `Session.Income_Of` multiplies that formula by 4 for corporation 1 only. Opening funds are 2400, upkeep is 10, and a win pays 1200 plus the region's unscaled income. Hire stays 400. Grants stay 0, 40, and 80. The quiet 30-day purse is 664. The scripted two-win 60-day purse is 1278. The smoke band is 400..8000, wide enough that a later seed does not fail the test for being 100 short, and tight enough that a return to the old −1484 fails it.
+
+**Eliminated follows the land.** `Campaign.Mark` used to set the flag only when holdings hit zero, and never cleared it. After a region changed hands, corporation 1 could be marked eliminated while it still held a region, and `Advance` then failed its postcondition. The flag is now true exactly when holdings are zero. Day 0 and day 10 digests did not move.
+
+**Tips are not a save field.** Five sentences live in the page. `localStorage` key `megacorp-hints` remembers that they were skipped or finished. Putting that flag in the snapshot would have been a format bump for something that is not the simulation.
+
+**A bad save does not raise.** The wasm runtime deletes `when others`, and a `raise` is an unreachable trap that blanks the page. `Save.Looks_Saved` checks the `MGC1` header, a numeric version, and 16 hex digits, and returns false. Continue then stays on the title, sets a trouble code, and the page says the save could not be read and offers New game. A module that fails to fetch hides the loading line and says the exported maps are still there.
+
+**The city frame.** The animation callback was redrawing the strategic map, which walks every pixel, on the same frames that paint the mission. During a mission it now paints only the tiles inside the camera. On this machine's WebKit, at 4×, the work inside that callback measured a median of 3.0 ms (max 24 ms over 23 frames) at 1280×900, and a median of 3.0 ms (max 27 ms over 21 frames) on an iPhone 13 profile. The mission's 48-tick cap ends the sample after a few dozen frames. Both medians sit under a 16 ms frame, so no further city-loop change was made.
+
+### Morning review — judgment calls, items 8 through 28
+
+Each line is the call made that night. The paragraphs above are the reasoning. Where 0.28.0 changed a number, the current figure is the one in "Balance".
+
+- **8 Licence.** MIT, copyright Robert Boettcher, SPDX headers. The imported trees were deleted in that revision. Git history was not rewritten.
+- **8 Copy check.** No FreeSynd code, table, or constant was found in our tree. RNG vectors are the published ones. Path costs 10 and 14 are the usual octile pair.
+- **8 Weapons.** Pistol 8/25/4/12, SMG 6/10/2/30, rifle 14/40/6/8. New numbers, not a copied table.
+- **8 Health.** 100. At 0 the ped stops and the queue clears.
+- **8 Shots.** Chebyshev reach. Bresenham. Only a building between the ends blocks. Hit chance is 100 up close and 40 at reach, one damage roll.
+- **8 Shoot_At.** One aim tick, then the weapon's rate. A shot that cannot be made spends no round.
+- **9 Tileset.** The Ada tool replaced the Python one. zlib level 9. The PNG bytes matched.
+- **9 Vehicles.** Car 80 health, speed 2, two seats. Van 120, speed 1, four seats. One-tile footprint. Any seated ped can drive. Exit searches orthogonal, then diagonal, then a two-tile ring. Wrecks block driving only. Passengers are not hurt by the shot that wrecks the vehicle.
+- **10 Behaviour.** One mood, updated after the action queue. Roles are civilian, guard, police, hostile, agent. Hearing 8, sight 6, panic 4, all Chebyshev. Police wait 12 ticks, not 5 seconds. Flee is a straight step. Persuasion is 8 ticks with no roll.
+- **11 Mission.** One `Play` advances the city the caller already holds. All four objectives must be true, and a dead squad loses even if they just became true. The CLI runs the built-in street mission. The fixture wins at tick 83. Default cap 200.
+- **12 Harness.** Skipped. No C++ comparison, so there is no 0.12.0.
+- **13 City.** Districts are a core, two strips, and the rest residential, not a noise field. Heights roll per tile inside the district band. Roads are full spans with gaps of 7..13. The river is painted before the roads, so crossings are bridges. One south door per built block. Connectivity is a flood, not a path from every tile. Column 1 stayed the demo street. `Test_Layout` remains for the old unit checks.
+- **14 Population.** The first cast stayed inside the old ped cap of 8. Three recipes: briefing, snatch, contract. Seeds 1..50 all win. Seed 42 is a briefing at tick 44.
+- **15 Caps and world.** Ped ids 1..256 and vehicle ids 1..64, and the tick visits only people who are present. About 55 people and 8 vehicles on the default map. Forty regions, four corporations, generated names, no real brands. Corporation 1 keeps only its home. Happiness is unrest. Seeds 1..50 still all win.
+- **16 Day.** The player does not take an AI turn. Income is population × tax / 1000. One attack a day, a formula, not a city mission. A year of seeds 1..20 eliminates the player seat every time.
+- **17 Save.** Line-oriented text of the mutable fields. FNV-1a 64. Version 1 rejected any other version before the checksum. 1082 bytes after 30 days, budget 8192.
+- **18 Log.** A second append-only file. One checksum per line. A torn tail is dropped. Compact after 32 lines. A scenario cannot re-roll. A visited region stays.
+- **19 Migration.** One pure text step per version. Version 2 adds research, default 0, and an algorithm stamp. New games stay on algorithm 1. An old log still replays through the version 1 projection.
+- **20 Wasm.** AdaWebPack 22.1.0, not a WebSocket server. The runtime is GPL-3.0 with the GCC Runtime Library Exception 3.1, which is why the module can stay MIT. `No_Exception_Propagation` means a raise cannot be caught. Seed 42 digests match native.
+- **21 Storage.** The module sees a memory map. OPFS when the origin allows it, otherwise IndexedDB, and a localStorage mirror either way. The newer continued day wins. Imports are PNG by signature or JSON that names `tile_width` and `tiles`.
+- **22 Tick.** 33 ms steps, at most 8 per frame. Commands are a code and five integers. `order` and `ticks` are log lines.
+- **23 Live mission.** The recipe's squad, one hostile, and one officer. The zone wins. A dead squad or 48 ticks loses. A win gives the player the region.
+- **24 Map.** Income, influence (defence + tech), and attack score are computed in Ada. The ticker is the delta log. One second is one campaign day at 1×. Below 720 px the panel is a bottom sheet.
+- **25 Books.** The purse is a separate integer from atlas cash. Original figures, revised in item 28: opening 1500, upkeep 30, win 250. Hiring costs 400. Six agents. Research unlocks gear and does not spend the points. A loss kills the weakest living pick. Format 3. Funds may go negative.
+- **26 Menus.** Ada chooses the screen. Harbour is seed 42, Foundry 7, Marches 100. Free play may re-roll only an unvisited region. The briefing is not the mission. Speed and volume live in a prefs file.
+- **27 Sound.** Ada emits event codes. The page synthesizes them. No audio files. Master, effects, and music persist. Audio starts on the first gesture, and a hidden tab is silent.
+- **28 Balance.** Purse scale 4, opening 2400, upkeep 10, win 1200 plus unscaled region income. Quiet day 30 is 664. Two wins over 60 days is 1278. See "Balance" above.
+- **28 Eliminated.** The flag is holdings = 0, in both directions.
+- **28 Page.** Five tips in localStorage. One button size, titles on the controls, larger type under 720 px. A loading line, a module-failure message, and a corrupt-save message that offers New game.
+- **28 Frame.** The mission paints the camera's tiles only. Measured medians were 3.0 ms on desktop WebKit and 3.0 ms on iPhone 13 WebKit.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -432,7 +493,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–27 (version 0.27.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–28 (version 0.28.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file. Open questions for the morning are at the end of this document.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -827,7 +888,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 25. **Agents, equipment, research, economy.** Done in 0.25.0. The roster is named and generated. Hiring costs 400. A dead agent stays dead in the save. Weapons, augments, and armour have prices and unlock from the research total. Daily income, upkeep, and the research grant move an integer purse that can go into debt, which closes hiring. The squad picker feeds a mission's payoff. Format version 3 migrates from v2. The page has Finances, Research, and Roster panels. Depends on: 17, 24. Try: open `web/index.html`, hire an agent, set a research grant, and watch the funds change as the day moves. Size: medium.
 26. **Menus and briefing.** Done in 0.26.0. Title, new game (scenario or free play), Continue, settings, and credits. A briefing precedes the mission and a debrief follows it. Pause can resume, save, or quit to the title. Scenario worlds stay locked across a reload. Free play re-rolls only an unvisited region. Depends on: 24, 25. Try: open `web/index.html`, start Harbour, open a briefing, finish or wait out the mission, read the debrief, and quit to the title. Continue restores the save. Size: medium.
 27. **Sound and music.** Done in 0.27.0. Ada emits event codes for gunfire, hits, deaths, sparse footsteps, clicks, win and loss, a police alarm, and border-fight blips. The page synthesizes them, plus a generated loop for the title, the map, and the city. Master, effects, and music volumes persist. Depends on: 22, 26. Try: open `web/index.html`, tap once, start a mission, and hear the placeholders. Hide the tab and the sound stops. Size: small-medium.
-28. **Variety and polish.** More block grammars, IPA meters, scanner, remaining weapons, destruction that stays visible on later visits, performance pass. Depends on: 23–27. Try: a short campaign of several generated missions that still looks consistent after reload. Size: ongoing.
+28. **Variety and polish.** Done in 0.28.0. The purse was tuned (opening 2400, upkeep 10, win 1200, purse income ×4). A first visit shows five tips. A corrupt save and a failed module each leave a message instead of a blank page. The city view at 4× stays under a frame on desktop WebKit and on an iPhone 13 profile. Depends on: 23–27. Try: open `web/index.html`, read the tips, play Harbour through a debrief, save, and continue. Size: small.
 
 ---
 
@@ -863,3 +924,15 @@ Still open:
 - GNAT-LLVM / WASM discussion: https://forum.ada-lang.io/t/gnat-llvm-in-alire-and-improved-wasm-support/4269
 
 Line counts and file lists were measured on `master` at `fa08136`. This file is `docs/DESIGN.md`. The Ada skeleton for item 1 is `megacorp/`.
+
+---
+
+## Open questions for Robert
+
+1. **The purse.** Scale 4, opening funds 2400, upkeep 10, and a win of 1200 plus the region's unscaled income keep seed 42 solvent. A quiet 30 days ends at 664. Two wins over 60 days end at 1278. Say if either figure should sit higher or lower.
+2. **Mid-mission saves.** Still skipped. A crash during a fight keeps the last finished mission.
+3. **Scope.** The editor, multiplayer leftovers, and the intro FLI stayed out. Confirm that cut.
+4. **Languages.** Generated missions have no string table and no EN/FR/IT/DE text.
+5. **Sound on a real phone.** This WebKit has no audio device, so a headless check can only see that the first tap tried to start the context. A speaker is the real listen.
+6. **Frame budget.** City view at 4× measured a 3.0 ms median on desktop WebKit (max 24 ms) and a 3.0 ms median on an iPhone 13 profile (max 27 ms). Say if that budget should be tighter.
+7. **Tips.** They live in `localStorage` (`megacorp-hints`), not in the save. Clearing site data shows them again.

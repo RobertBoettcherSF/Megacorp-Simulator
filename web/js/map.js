@@ -988,6 +988,7 @@ function readMenu() {
     cursor = line.cursor;
     credits.push(line.text);
   }
+  const trouble = view.getUint8(cursor);
   return {
     screen, choice, saved, speed, volume, effects, music, mode, locked,
     region, typed,
@@ -995,7 +996,7 @@ function readMenu() {
     objective: objective.text,
     threat: threat.text,
     regionName: regionName.text,
-    scenarios, credits
+    scenarios, credits, trouble
   };
 }
 
@@ -1066,6 +1067,7 @@ function addChoice(parent, label, index, picked, onClick) {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
+  button.title = label;
   if (index === picked) {
     button.className = "picked";
   }
@@ -1101,10 +1103,12 @@ function paintMenu() {
   root.dataset.master = String(menu.volume);
   root.dataset.effects = String(menu.effects);
   root.dataset.music = String(menu.music);
+  root.dataset.trouble = String(menu.trouble || 0);
   syncVolumes(menu);
   const stamp = [
     menu.screen, menu.choice, menu.saved, menu.speed,
-    menu.typed, menu.outcome, menu.loot, menu.regionName, menu.objective
+    menu.typed, menu.outcome, menu.loot, menu.regionName, menu.objective,
+    menu.trouble
   ].join(":");
   if (stamp === menuStamp) {
     return;
@@ -1115,6 +1119,12 @@ function paintMenu() {
     "Briefing", "Mission", "Debrief", "Paused"];
   title.textContent = names[menu.screen] || "Megacorp";
   if (menu.screen === 0) {
+    if (menu.trouble === 1) {
+      const warn = document.createElement("p");
+      warn.id = "save-error";
+      warn.textContent = "That save could not be read. Start a new game.";
+      body.appendChild(warn);
+    }
     addChoice(body, "New game", 0, menu.choice, () => menuCommand(MENU_ACT.openNew, 0));
     if (menu.saved) {
       addChoice(body, "Continue", 1, menu.choice, () => menuCommand(MENU_ACT.continue, 0));
@@ -1798,7 +1808,7 @@ async function main() {
   }
   await loadFile(index.maps[select.selectedIndex].file);
   try {
-    const response = await fetch("megacorp.wasm");
+    const response = await fetch("megacorp.wasm?v=028");
     if (!response.ok) {
       throw new Error(String(response.status));
     }
@@ -1822,6 +1832,11 @@ async function main() {
       paintMenu();
     };
     paintMenu();
+    const loading = document.getElementById("loading");
+    if (loading) {
+      loading.hidden = true;
+    }
+    showHints();
     document.getElementById("new-world").addEventListener("click", () => {
       menuCommand(MENU_ACT.openNew, 0);
     });
@@ -1925,7 +1940,52 @@ async function main() {
     });
   } catch (err) {
     document.getElementById("engine").textContent = "engine: trace";
+    const loading = document.getElementById("loading");
+    if (loading) {
+      loading.hidden = true;
+    }
+    const fail = document.getElementById("boot-fail");
+    if (fail) {
+      fail.hidden = false;
+      fail.textContent =
+        "The simulation module did not load. The exported maps are still here.";
+    }
   }
+}
+
+const HINTS = [
+  "New game locks a scenario, or you can type a seed for free play.",
+  "Open a region for its briefing, then press Start.",
+  "Pause, 1x, 2x, and 4x run the campaign on the map.",
+  "Hire agents and fund research from the side sheet. Debt stops hiring.",
+  "Menu saves the game. Quit to the title and Continue restores it."
+];
+
+function showHints() {
+  const box = document.getElementById("hints");
+  const text = document.getElementById("hint-text");
+  if (!box || !text || localStorage.getItem("megacorp-hints") === "seen") {
+    return;
+  }
+  let step = 0;
+  const paint = () => {
+    text.textContent = HINTS[step];
+    box.hidden = false;
+  };
+  paint();
+  document.getElementById("hint-next").addEventListener("click", () => {
+    step += 1;
+    if (step >= HINTS.length) {
+      localStorage.setItem("megacorp-hints", "seen");
+      box.hidden = true;
+      return;
+    }
+    paint();
+  });
+  document.getElementById("hint-skip").addEventListener("click", () => {
+    localStorage.setItem("megacorp-hints", "seen");
+    box.hidden = true;
+  });
 }
 
 function showError(err) {

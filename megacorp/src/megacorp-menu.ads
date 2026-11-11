@@ -38,6 +38,7 @@ package Megacorp.Menu is
       Loot     : Integer := 0;
       Before   : Integer := 0;
       After    : Integer := 0;
+      Trouble  : Natural := 0;
    end record;
 
    Scenario_Count : constant := 3;
@@ -58,6 +59,9 @@ package Megacorp.Menu is
       Arg : Integer) return Effect;
 
    procedure Arrive (Item : in out Card; Next : Screen);
+
+   procedure Note_Trouble (Item : in out Card; Code : Natural)
+     with Post => Item.Trouble = Code;
 
    procedure Note_Result
      (Item : in out Card;

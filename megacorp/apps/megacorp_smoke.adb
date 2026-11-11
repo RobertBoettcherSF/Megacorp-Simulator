@@ -59,9 +59,14 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.27.0"
+     (Megacorp.Version = "0.28.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.27.0");
+      "version 0.28.0");
+   Smoke_Check.Expect
+     (not Megacorp.Save.Looks_Saved ("NOT-A-SAVE")
+      and then Megacorp.Save.Looks_Saved
+        ("MGC1 3" & ASCII.LF & "0123456789abcdef" & ASCII.LF),
+      "a corrupt save is recognised");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -1356,10 +1361,10 @@ begin
             and then Move.Sum_Ok (Next)
             and then Move.To_Current (Next) = Next
             and then Ada.Strings.Fixed.Index (Next, "algorithm 1") > 0
-            and then Ada.Strings.Fixed.Index (Next, "funds 1500") > 0
+            and then Ada.Strings.Fixed.Index (Next, "funds 2400") > 0
             and then Snap.Algorithm = Globe.Current_Algorithm
             and then Snap.Day = 0
-            and then Snap.Funds = 1500
+            and then Snap.Funds = 2400
             and then Snap.Roster_Count = 0
             and then Snap.Stamp (1 .. Snap.Stamp_Len) = "0.18.0"
             and then Study,
@@ -1484,7 +1489,6 @@ begin
       Book : Journal.Journal;
       Who : Positive := 1;
       Open : Boolean;
-      Raised_Hire : Boolean := False;
       Seal : RNG.Word;
    begin
       Ada.Directories.Create_Path ("/tmp/megacorp-economy");
@@ -1525,26 +1529,83 @@ begin
       Book := Journal.Load (Root, "books.log");
       Journal.Replay (Back, World, Book);
       Smoke_Check.Expect
-         (Hex (Seal) = "44d80c92b8a2199b"
+         (Hex (Seal) = "5fba447fa43a5941"
          and then Megacorp.Save.Digest (Books.Ledger (Back)) = Seal
-         and then Snap.Funds < 0
-         and then Books.In_Debt (Snap)
-         and then not Books.Can_Hire (Snap)
+         and then Snap.Funds = 664
          and then Open
          and then Snap.Company (1).Research = 1200
          and then Journal.Notice (Book) = "",
          "economy balance over 30 days for seed 42");
+
+      declare
+         function Prize (Item : Megacorp.World.Atlas) return Natural;
+         function Prize (Item : Megacorp.World.Atlas) return Natural is
+            Owner : Positive;
+            Held : Natural;
+         begin
+            for I in 1 .. Item.Regions loop
+               Owner := Item.Area (I).Owner;
+               if Owner /= 1 then
+                  Held := 0;
+                  for J in 1 .. Item.Regions loop
+                     if Item.Area (J).Owner = Owner then
+                        Held := Held + 1;
+                     end if;
+                  end loop;
+                  if Held > 1 then
+                     return I;
+                  end if;
+               end if;
+            end loop;
+            return 0;
+         end Prize;
+         Region : Natural;
       begin
-         Journal.Commit
-           (Root, "books.log", Snap, World, Book,
-            Journal.Hire_Agent (Snap));
-      exception
-         when Error : Megacorp.Save.Save_Error =>
-            Raised_Hire :=
-              Ada.Exceptions.Exception_Message (Error) = "no hiring";
+         World := Globe.Generate (42, Defaults);
+         Snap := Megacorp.Save.Capture
+           (World, 0, Params.Auto_Play);
+         Snap.Grant := Books.Grant_Low;
+         for Day in 1 .. 60 loop
+            if Day = 12 or else Day = 36 then
+               Region := Prize (World);
+               if Region /= 0 then
+                  declare
+                     Previous : constant Positive :=
+                       World.Area (Region).Owner;
+                  begin
+                     World.Area (Region).Owner := 1;
+                     World.Area (Region).Unrest := 0;
+                     if Megacorp.World.Campaign.Holdings
+                       (World, Previous) = 0
+                     then
+                        World.Company (Previous).Eliminated := True;
+                     end if;
+                  end;
+               else
+                  Region := 1;
+               end if;
+               Books.Debrief
+                 (Snap, World, Region, Megacorp.Save.Won);
+            end if;
+            Books.Play_Day (Snap, World);
+         end loop;
+         Smoke_Check.Expect
+           (Snap.Funds >= 400 and then Snap.Funds <= 8000,
+            "a reasonable player stays solvent for 60 days");
       end;
+
+      World := Globe.Generate (42, Defaults);
+      Snap := Megacorp.Save.Capture (World, 0, Params.Auto_Play);
+      Snap.Grant := Books.Grant_High;
+      while Books.Can_Hire (Snap) loop
+         Books.Hire (Snap);
+      end loop;
+      for Day in 1 .. 40 loop
+         Books.Play_Day (Snap, World);
+      end loop;
       Smoke_Check.Expect
-        (Raised_Hire, "debt refuses a hire");
+        (Books.In_Debt (Snap) and then not Books.Can_Hire (Snap),
+         "a full roster and a high grant can reach debt");
 
       World := Globe.Generate (42, Defaults);
       Snap := Megacorp.Save.Capture (World, 0, Params.Auto_Play);

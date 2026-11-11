@@ -682,7 +682,7 @@ package body Megacorp.Save is
          Snap.Agent (I).Region := Item.Company (1).Home;
       end loop;
       Take (Snap, Item, Day);
-      Snap.Funds := 1500;
+      Snap.Funds := 2400;
       Snap.Grant := 0;
       Snap.Roster_Count := 2;
       Snap.Roster (1) := Agents.Person (Item.Seed, 1);
@@ -824,6 +824,40 @@ package body Megacorp.Save is
    begin
       Data.Virtual_FS.Write (Disk, Path, Image (Snap));
    end Store;
+
+   function Looks_Saved (Text : String) return Boolean is
+      Mark : Natural;
+      Split : Natural;
+   begin
+      if Text'Length < 24 then
+         return False;
+      end if;
+      if Text (Text'First .. Text'First + 4) /= "MGC1 " then
+         return False;
+      end if;
+      Mark := Text'First + 5;
+      while Mark <= Text'Last and then Text (Mark) /= ASCII.LF loop
+         if Text (Mark) not in '0' .. '9' then
+            return False;
+         end if;
+         Mark := Mark + 1;
+      end loop;
+      if Mark > Text'Last then
+         return False;
+      end if;
+      Split := Mark + 1;
+      if Split + 16 > Text'Last then
+         return False;
+      end if;
+      for I in Split .. Split + 15 loop
+         if Text (I) not in '0' .. '9'
+           and then Text (I) not in 'a' .. 'f'
+         then
+            return False;
+         end if;
+      end loop;
+      return Text (Split + 16) = ASCII.LF;
+   end Looks_Saved;
 
    function Load
      (Disk : Data.Virtual_FS.Backend'Class;

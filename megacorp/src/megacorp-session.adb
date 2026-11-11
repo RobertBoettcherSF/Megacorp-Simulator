@@ -85,7 +85,7 @@ package body Megacorp.Session is
    begin
       for I in 1 .. Item.Regions loop
          if Item.Area (I).Owner = 1 then
-            Total := Total + World.Campaign.Income
+            Total := Total + Purse_Scale * World.Campaign.Income
               (Item.Area (I).Population, Item.Area (I).Tax);
          end if;
       end loop;

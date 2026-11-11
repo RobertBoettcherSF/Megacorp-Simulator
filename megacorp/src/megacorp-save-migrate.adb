@@ -155,7 +155,7 @@ package body Megacorp.Save.Migrate is
    function Books (Payload : String) return String is
    begin
       return Payload
-        & "funds 1500" & LF
+        & "funds 2400" & LF
         & "grant 0" & LF
         & "roster 0" & LF
         & "picks 0 0 0 0" & LF

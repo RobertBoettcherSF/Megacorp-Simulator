@@ -357,6 +357,7 @@ const MegacorpPlay = (() => {
   }
 
   function frame(now) {
+    const frameStart = performance.now();
     if (!last) {
       last = now;
     }
@@ -404,7 +405,17 @@ const MegacorpPlay = (() => {
         }
       }
     }
-    draw();
+    if (screen === 6) {
+      draw();
+      if (speed === 4) {
+        const spent = performance.now() - frameStart;
+        const samples = window.__cityFrames || (window.__cityFrames = []);
+        samples.push(spent);
+        if (samples.length > 180) {
+          samples.shift();
+        }
+      }
+    }
     if (window.paintMenu) {
       window.paintMenu();
     }

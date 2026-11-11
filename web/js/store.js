@@ -281,3 +281,4 @@ const MegacorpStore = (() => {
 
   return { open, imports, bind, get, flush };
 })();
+window.MegacorpStore = MegacorpStore;
