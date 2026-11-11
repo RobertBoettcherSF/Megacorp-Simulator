@@ -93,4 +93,16 @@ package Megacorp.Wasm_Store is
      with Export,
           Convention => C,
           External_Name => "megacorp_menu_size";
+
+   --  Item 27. Event codes for the ticks just run, plus the
+   --  voice and ambient tables.
+   function Sound_State return System.Address
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_sound";
+
+   function Sound_State_Size return Interfaces.Unsigned_32
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_sound_size";
 end Megacorp.Wasm_Store;

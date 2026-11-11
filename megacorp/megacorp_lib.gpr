@@ -39,6 +39,7 @@ project Megacorp_Lib is
       "Megacorp.Research",
       "Megacorp.Session",
       "Megacorp.Menu",
+      "Megacorp.Sound",
       "Megacorp.Save",
       "Megacorp.Save.Log",
       "Megacorp.Save.Migrate",

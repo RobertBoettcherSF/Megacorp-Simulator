@@ -408,6 +408,9 @@ const MegacorpPlay = (() => {
     if (window.paintMenu) {
       window.paintMenu();
     }
+    if (window.MegacorpSound) {
+      window.MegacorpSound.pump();
+    }
     requestAnimationFrame(frame);
   }
 

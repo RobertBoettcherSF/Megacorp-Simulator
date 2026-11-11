@@ -66,6 +66,7 @@ set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
 "$gcc" "$@" "$root/src/megacorp-behaviour.adb"
 "$gcc" "$@" "$root/src/megacorp-mission.adb"
 "$gcc" "$@" "$root/src/megacorp-mission-gen.adb"
+"$gcc" "$@" "$root/src/megacorp-sound.adb"
 "$gcc" "$@" "$root/src/megacorp-play.adb"
 "$gcc" "$@" "$root/src/megacorp-agents.adb"
 "$gcc" "$@" "$root/src/megacorp-research.adb"
@@ -93,6 +94,7 @@ wasm-ld --no-entry --export-memory --allow-undefined \
    --export=megacorp_brief --export=megacorp_brief_size \
    --export=megacorp_office --export=megacorp_office_size \
    --export=megacorp_menu --export=megacorp_menu_size \
+   --export=megacorp_sound --export=megacorp_sound_size \
    --export=megacorp_state --export=megacorp_state_size \
    -z stack-size=2097152 \
    megacorp_wasm.o b~megacorp_wasm.o \
@@ -104,7 +106,7 @@ wasm-ld --no-entry --export-memory --allow-undefined \
    megacorp-actions.o megacorp-behaviour.o \
    megacorp-mission.o megacorp-mission-gen.o megacorp-play.o \
    megacorp-agents.o megacorp-research.o megacorp-session.o \
-   megacorp-menu.o \
+   megacorp-menu.o megacorp-sound.o \
    megacorp-data-virtual_fs.o megacorp-data-virtual_fs-browser.o \
    megacorp-assets-import.o \
    megacorp-save.o megacorp-save-migrate.o megacorp-save-log.o \

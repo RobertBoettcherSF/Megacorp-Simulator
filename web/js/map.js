@@ -907,7 +907,9 @@ const MENU_ACT = {
   reroll: 20,
   openNew: 21,
   settings: 22,
-  credits: 23
+  credits: 23,
+  effects: 24,
+  music: 25
 };
 
 function takeText(view, cursor, width) {
@@ -935,6 +937,10 @@ function readMenu() {
   const speed = view.getUint8(cursor);
   cursor += 1;
   const volume = view.getUint8(cursor);
+  cursor += 1;
+  const effects = view.getUint8(cursor);
+  cursor += 1;
+  const music = view.getUint8(cursor);
   cursor += 1;
   const mode = view.getUint8(cursor);
   cursor += 1;
@@ -983,7 +989,8 @@ function readMenu() {
     credits.push(line.text);
   }
   return {
-    screen, choice, saved, speed, volume, mode, locked, region, typed,
+    screen, choice, saved, speed, volume, effects, music, mode, locked,
+    region, typed,
     scenario, outcome, casualties, loot, before, after, reward,
     objective: objective.text,
     threat: threat.text,
@@ -1013,6 +1020,46 @@ function menuCommand(act, arg) {
     draw();
   }
   paintMenu();
+  if (window.MegacorpSound) {
+    window.MegacorpSound.pump();
+  }
+}
+
+function addSlider(parent, label, value, id, act) {
+  const row = document.createElement("label");
+  const name = document.createElement("span");
+  name.id = id + "-label";
+  name.textContent = `${label} ${value}`;
+  const input = document.createElement("input");
+  input.id = id;
+  input.type = "range";
+  input.min = "0";
+  input.max = "100";
+  input.value = String(value);
+  input.addEventListener("input", () => {
+    menuCommand(act, Number(input.value));
+  });
+  row.appendChild(name);
+  row.appendChild(input);
+  parent.appendChild(row);
+}
+
+function syncVolumes(menu) {
+  const rows = [
+    ["vol-master", "Master", menu.volume],
+    ["vol-effects", "Effects", menu.effects],
+    ["vol-music", "Music", menu.music]
+  ];
+  rows.forEach((row) => {
+    const input = document.getElementById(row[0]);
+    const name = document.getElementById(row[0] + "-label");
+    if (name) {
+      name.textContent = `${row[1]} ${row[2]}`;
+    }
+    if (input && document.activeElement !== input) {
+      input.value = String(row[2]);
+    }
+  });
 }
 
 function addChoice(parent, label, index, picked, onClick) {
@@ -1040,8 +1087,23 @@ function paintMenu() {
   if (reroll) {
     reroll.hidden = !(menu.screen === 4 && menu.mode === 1 && !menu.locked);
   }
+  root.dataset.screen = String(menu.screen);
+  root.dataset.outcome = String(menu.outcome);
+  root.dataset.loot = String(menu.loot);
+  root.dataset.casualties = String(menu.casualties);
+  root.dataset.before = String(menu.before);
+  root.dataset.after = String(menu.after);
+  root.dataset.saved = menu.saved ? "yes" : "no";
+  root.dataset.region = menu.regionName;
+  root.dataset.objective = menu.objective;
+  root.dataset.threat = menu.threat;
+  root.dataset.reward = String(menu.reward);
+  root.dataset.master = String(menu.volume);
+  root.dataset.effects = String(menu.effects);
+  root.dataset.music = String(menu.music);
+  syncVolumes(menu);
   const stamp = [
-    menu.screen, menu.choice, menu.saved, menu.speed, menu.volume,
+    menu.screen, menu.choice, menu.saved, menu.speed,
     menu.typed, menu.outcome, menu.loot, menu.regionName, menu.objective
   ].join(":");
   if (stamp === menuStamp) {
@@ -1088,16 +1150,10 @@ function paintMenu() {
     ["Pause", "Speed 1x", "Speed 2x", "Speed 4x"].forEach((label, index) => {
       addChoice(body, label, index, menu.choice, () => menuCommand(MENU_ACT.speed, [0, 1, 2, 4][index]));
     });
-    addChoice(body, "Quieter", 4, menu.choice, () => {
-      menuCommand(MENU_ACT.volume, Math.max(0, menu.volume - 10));
-    });
-    addChoice(body, "Louder", 5, menu.choice, () => {
-      menuCommand(MENU_ACT.volume, Math.min(100, menu.volume + 10));
-    });
-    addChoice(body, "Back", 6, menu.choice, () => menuCommand(MENU_ACT.back, 0));
-    const sound = document.createElement("p");
-    sound.textContent = `Sound volume ${menu.volume}. Playback waits for a later version.`;
-    body.appendChild(sound);
+    addChoice(body, "Back", 4, menu.choice, () => menuCommand(MENU_ACT.back, 0));
+    addSlider(body, "Master", menu.volume, "vol-master", MENU_ACT.volume);
+    addSlider(body, "Effects", menu.effects, "vol-effects", MENU_ACT.effects);
+    addSlider(body, "Music", menu.music, "vol-music", MENU_ACT.music);
   } else if (menu.screen === 3) {
     menu.credits.forEach((line) => {
       const row = document.createElement("p");
@@ -1139,17 +1195,6 @@ function paintMenu() {
     addChoice(body, "Save", 1, menu.choice, () => menuCommand(MENU_ACT.save, 0));
     addChoice(body, "Quit to title", 2, menu.choice, () => menuCommand(MENU_ACT.quit, 0));
   }
-  root.dataset.screen = String(menu.screen);
-  root.dataset.outcome = String(menu.outcome);
-  root.dataset.loot = String(menu.loot);
-  root.dataset.casualties = String(menu.casualties);
-  root.dataset.before = String(menu.before);
-  root.dataset.after = String(menu.after);
-  root.dataset.saved = menu.saved ? "yes" : "no";
-  root.dataset.region = menu.regionName;
-  root.dataset.objective = menu.objective;
-  root.dataset.threat = menu.threat;
-  root.dataset.reward = String(menu.reward);
 }
 
 function paintOffice() {
@@ -1762,6 +1807,7 @@ async function main() {
     const bytes = await response.arrayBuffer();
     const mod = await WebAssembly.instantiate(bytes, MegacorpStore.imports());
     wasmExports = mod.instance.exports;
+    window.wasmExports = wasmExports;
     MegacorpStore.bind(wasmExports.memory);
     wasmExports.adainit();
     try {

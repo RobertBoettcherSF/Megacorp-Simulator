@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.27.0, item 27
+
+Gunfire, hits, deaths, occasional footsteps, UI clicks, win and loss stingers, a police alarm, and a border-fight blip are event codes chosen in Ada. The page plays them with oscillators and noise from parameter tables Ada also writes. Each of the title, the map, and the city has a short generated loop. Master, effects, and music volumes are real and are stored with the other settings. Audio starts on the first tap or key, and a hidden tab is silent.
+
 ### 2026-11-11 — version 0.26.0, item 26
 
 The page opens on a title screen. New game offers three fixed-seed scenarios, which lock the world, or free play with a typed or rolled seed. Continue appears when a save exists. Settings stores a speed default and a sound-volume placeholder. Credits name the MIT sources and the AdaWebPack runtime exception. A region opens a briefing (objective, enemy estimate, reward, squad and loadout) with Start and Cancel. After the mission, a debrief shows the outcome, casualties, loot, and the purse before and after, then returns to the map. Pause can resume, save, or quit to the title. The screen is decided in Ada. JavaScript draws it, and the same actions work from the keyboard, the mouse, and a touch.
@@ -412,6 +416,12 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **The briefing is not the mission.** Choosing a region opens the recipe's objective, the enemy estimate, and the win reward (250 plus that region's income). The squad and its weapon, augments, and armour come from the roster. Start logs the same order as a region click used to. Cancel returns to the map. When the mission ends, the debrief records the outcome, how many roster agents died, and the purse before and after. Speed and the unused sound volume live in a small prefs file so they survive a reload without a new save version.
 
+### Item 27 — sound
+
+**Ada names the noise.** A tick records gunfire when someone fires, a hit when the shot lands, a death when a person stops being alive, one footstep every eighth tick if anyone moved, an alarm when police become alert, and a win or loss stinger when the mission ends. A campaign day that changes an owner adds a map blip. A menu press adds a click. None of these change the world digest.
+
+**The page only plays.** Each code has a wave, a frequency, a length, an attack, and a gain, written by Ada. Loops for the title, the map, and the city are eight notes from a formula, not a sample file. There are no external audio files. Master, effects, and music are separate levels in the same prefs file as the speed. The audio context starts on the first pointer or key, which is what iOS Safari requires, and the master gain goes to zero while the tab is hidden.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -422,7 +432,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–26 (version 0.26.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–27 (version 0.27.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -816,7 +826,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 24. **World-map UI.** Done in 0.24.0. The map is coloured by owner, the player's regions are marked, and visited regions are drawn differently. A hover or tap opens Ada's figures for that region: owner, population, unrest, influence, income, AI pressure, and the recipe preview. Corporations list region counts and strength. Pause, 1x, 2x, and 4x advance the campaign. Border fights and mission results from the delta log are the ticker. A narrow window uses a bottom sheet. Depends on: 15, 16, 23. Try: open `web/index.html`, hover a region, and read the panel. Let the day run and see a border fight in the log. Size: medium.
 25. **Agents, equipment, research, economy.** Done in 0.25.0. The roster is named and generated. Hiring costs 400. A dead agent stays dead in the save. Weapons, augments, and armour have prices and unlock from the research total. Daily income, upkeep, and the research grant move an integer purse that can go into debt, which closes hiring. The squad picker feeds a mission's payoff. Format version 3 migrates from v2. The page has Finances, Research, and Roster panels. Depends on: 17, 24. Try: open `web/index.html`, hire an agent, set a research grant, and watch the funds change as the day moves. Size: medium.
 26. **Menus and briefing.** Done in 0.26.0. Title, new game (scenario or free play), Continue, settings, and credits. A briefing precedes the mission and a debrief follows it. Pause can resume, save, or quit to the title. Scenario worlds stay locked across a reload. Free play re-rolls only an unvisited region. Depends on: 24, 25. Try: open `web/index.html`, start Harbour, open a briefing, finish or wait out the mission, read the debrief, and quit to the title. Continue restores the save. Size: medium.
-27. **Sound and music.** WebAudio and own placeholder SFX, plus a music toggle. Depends on: 22. Try: shots and a music toggle. Size: small-medium.
+27. **Sound and music.** Done in 0.27.0. Ada emits event codes for gunfire, hits, deaths, sparse footsteps, clicks, win and loss, a police alarm, and border-fight blips. The page synthesizes them, plus a generated loop for the title, the map, and the city. Master, effects, and music volumes persist. Depends on: 22, 26. Try: open `web/index.html`, tap once, start a mission, and hear the placeholders. Hide the tab and the sound stops. Size: small-medium.
 28. **Variety and polish.** More block grammars, IPA meters, scanner, remaining weapons, destruction that stays visible on later visits, performance pass. Depends on: 23–27. Try: a short campaign of several generated missions that still looks consistent after reload. Size: ongoing.
 
 ---

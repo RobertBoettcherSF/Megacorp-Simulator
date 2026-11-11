@@ -87,4 +87,14 @@ package Megacorp.Play is
    function City_State return System.Address;
 
    function City_State_Size return Interfaces.Unsigned_32;
+
+   --  Item 27. Events from the ticks just run. Cleared at the
+   --  start of the next Run.
+   function Sound_Count return Natural;
+
+   function Sound_Code (Index : Positive) return Natural
+     with Pre => Index <= Sound_Count;
+
+   procedure Clear_Sounds
+     with Post => Sound_Count = 0;
 end Megacorp.Play;

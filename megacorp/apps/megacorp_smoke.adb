@@ -34,6 +34,7 @@ with Megacorp.Play;
 with Megacorp.Research;
 with Megacorp.Session;
 with Megacorp.Menu;
+with Megacorp.Sound;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -58,9 +59,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.26.0"
+     (Megacorp.Version = "0.27.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.26.0");
+      "version 0.27.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -2805,6 +2806,24 @@ begin
         (Blocked (Back, Home, 2, "visited region stays")
          and then Home.Area (2).City = World.Area (2).City,
          "a visited region is not re-rolled after reload");
+   end;
+
+   declare
+      package Ear renames Megacorp.Sound;
+      Tape : Ear.Tape;
+   begin
+      Megacorp.Play.Begin_Mission (42, 1);
+      for Tick in 1 .. 48 loop
+         Megacorp.Play.Run (1);
+         for I in 1 .. Megacorp.Play.Sound_Count loop
+            Ear.Add
+              (Tape, Ear.Kind'Val (Megacorp.Play.Sound_Code (I)));
+         end loop;
+      end loop;
+      Smoke_Check.Expect
+        (Tape.Count > 0
+         and then Ear.Seal (Tape) = "6749fcdb148bd0ce",
+         "a scripted mission has a fixed sound digest");
    end;
 
    if Smoke_Check.Failure_Count = 0 then

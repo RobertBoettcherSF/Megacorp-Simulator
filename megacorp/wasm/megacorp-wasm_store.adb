@@ -15,6 +15,7 @@ with Megacorp.RNG;
 with Megacorp.Save;
 with Megacorp.Save.Log;
 with Megacorp.Session;
+with Megacorp.Sound;
 with Megacorp.Weapons;
 with Megacorp.World.Campaign;
 with Megacorp.World.Gen;
@@ -44,6 +45,13 @@ package body Megacorp.Wasm_Store is
    Menu_Max : constant := 1024;
    Menu_Buf : array (0 .. Menu_Max - 1) of Octet := (others => 0);
    Menu_Used : Natural := 0;
+   Sound_Max : constant := 512;
+   Sound_Buf : array (0 .. Sound_Max - 1) of Octet := (others => 0);
+   Sound_Used : Natural := 0;
+   Sound_Seq : Natural := 0;
+   Extra_Max : constant := 8;
+   Extra : array (1 .. Extra_Max) of Natural := (others => 0);
+   Extra_N : Natural := 0;
    Card : Menu.Card;
    World_Ready : Boolean := False;
 
@@ -51,6 +59,8 @@ package body Megacorp.Wasm_Store is
      (Seed : Interfaces.Unsigned_32;
       Mode : Parameters.Play_Mode);
    procedure Write_Menu;
+   procedure Write_Sound;
+   procedure Push_Extra (Code : Natural);
    procedure Save_Game;
    procedure Load_Game;
    procedure Launch_Mission;
@@ -294,6 +304,8 @@ package body Megacorp.Wasm_Store is
       end if;
       Put_M (Card.Speed);
       Put_M (Card.Volume);
+      Put_M (Card.Effects);
+      Put_M (Card.Music);
       if World_Ready and then Snap.Play = Parameters.Scenario then
          Put_M (0);
       elsif World_Ready and then Snap.Play = Parameters.Free_Play then
@@ -352,6 +364,97 @@ package body Megacorp.Wasm_Store is
       Put_M_Text
         ("Library Exception 3.1, so this project stays MIT.", 72);
    end Write_Menu;
+
+   procedure Put_S (Value : Natural) is
+   begin
+      if Sound_Used >= Sound_Max then
+         return;
+      end if;
+      Sound_Buf (Sound_Used) := Octet (Value mod 256);
+      Sound_Used := Sound_Used + 1;
+   end Put_S;
+
+   procedure Put_S16 (Value : Natural) is
+   begin
+      Put_S (Value mod 256);
+      Put_S (Value / 256);
+   end Put_S16;
+
+   procedure Push_Extra (Code : Natural) is
+   begin
+      if Extra_N < Extra_Max then
+         Extra_N := Extra_N + 1;
+         Extra (Extra_N) := Code;
+      end if;
+   end Push_Extra;
+
+   function Ambient_Code return Natural is
+   begin
+      if Card.Where = Menu.Field
+        or else (Card.Where = Menu.Paused
+                 and then Card.Under = Menu.Field)
+      then
+         return Sound.Scene'Pos (Sound.City);
+      elsif Card.Where = Menu.Atlas
+        or else Card.Where = Menu.Briefing
+        or else Card.Where = Menu.Debrief
+        or else Card.Where = Menu.Paused
+      then
+         return Sound.Scene'Pos (Sound.Map);
+      end if;
+      return Sound.Scene'Pos (Sound.Title);
+   end Ambient_Code;
+
+   procedure Write_Sound is
+      Total : Natural := 0;
+      Voice : Sound.Voice;
+      Phrase : Sound.Bar;
+   begin
+      if Sound_Seq < 255 then
+         Sound_Seq := Sound_Seq + 1;
+      else
+         Sound_Seq := 1;
+      end if;
+      Sound_Used := 0;
+      Put_S (1);
+      Put_S (Sound_Seq);
+      Put_S (Ambient_Code);
+      Put_S (Card.Volume);
+      Put_S (Card.Effects);
+      Put_S (Card.Music);
+      Total := Play.Sound_Count + Extra_N;
+      if Total > Sound.Max_Events then
+         Total := Sound.Max_Events;
+      end if;
+      Put_S (Total);
+      for I in 1 .. Play.Sound_Count loop
+         if I <= Total then
+            Put_S (Play.Sound_Code (I));
+         end if;
+      end loop;
+      for I in 1 .. Extra_N loop
+         if Play.Sound_Count + I <= Total then
+            Put_S (Extra (I));
+         end if;
+      end loop;
+      for Kind in Sound.Click .. Sound.Blip loop
+         Voice := Sound.Tone (Kind);
+         Put_S (Sound.Wave'Pos (Voice.Shape));
+         Put_S16 (Voice.Freq);
+         Put_S16 (Voice.Ms);
+         Put_S (Voice.Attack);
+         Put_S (Voice.Gain);
+      end loop;
+      for Place in Sound.Scene loop
+         Phrase := Sound.Loop_Of (Place);
+         for I in Phrase'Range loop
+            Put_S16 (Phrase (I).Freq);
+            Put_S16 (Phrase (I).Ms);
+         end loop;
+      end loop;
+      Extra_N := 0;
+      Play.Clear_Sounds;
+   end Write_Sound;
 
    procedure Put_Name (Item : String) is
       Last : Natural;
@@ -629,6 +732,8 @@ package body Megacorp.Wasm_Store is
          else "");
       Speed : constant Integer := Number_After (Text, "speed");
       Volume : constant Integer := Number_After (Text, "volume");
+      Effects : constant Integer := Number_After (Text, "effects");
+      Music : constant Integer := Number_After (Text, "music");
    begin
       if Speed = 0 or else Speed = 1 or else Speed = 2
         or else Speed = 4
@@ -637,6 +742,12 @@ package body Megacorp.Wasm_Store is
       end if;
       if Volume >= 0 and then Volume <= 100 then
          Card.Volume := Volume;
+      end if;
+      if Effects >= 0 and then Effects <= 100 then
+         Card.Effects := Effects;
+      end if;
+      if Music >= 0 and then Music <= 100 then
+         Card.Music := Music;
       end if;
    end Load_Prefs;
 
@@ -649,7 +760,9 @@ package body Megacorp.Wasm_Store is
       end Trim;
       Text : constant String :=
         "speed " & Trim (Card.Speed) & ASCII.LF
-        & "volume " & Trim (Card.Volume) & ASCII.LF;
+        & "volume " & Trim (Card.Volume) & ASCII.LF
+        & "effects " & Trim (Card.Effects) & ASCII.LF
+        & "music " & Trim (Card.Music) & ASCII.LF;
    begin
       Host_Files.Write (Files, "prefs.txt", Text);
    end Store_Prefs;
@@ -689,10 +802,22 @@ package body Megacorp.Wasm_Store is
          when Menu.Reroll =>
             Try_Reroll;
       end case;
-      if Act = Menu.Set_Speed or else Act = Menu.Set_Volume then
+      if Act = Menu.Set_Speed or else Act = Menu.Set_Volume
+        or else Act = Menu.Set_Effects or else Act = Menu.Set_Music
+      then
          Store_Prefs;
       end if;
+      if Act /= Menu.Up and then Act /= Menu.Down
+        and then Act /= Menu.Set_Speed
+        and then Act /= Menu.Set_Volume
+        and then Act /= Menu.Set_Effects
+        and then Act /= Menu.Set_Music
+        and then Act /= Menu.Type_Digit
+      then
+         Push_Extra (Sound.Kind'Pos (Sound.Click));
+      end if;
       Write_Menu;
+      Write_Sound;
    end Apply_Menu;
 
    procedure Boot (Seed : Interfaces.Unsigned_32) is
@@ -704,6 +829,7 @@ package body Megacorp.Wasm_Store is
       Card.Cursor := 0;
       World_Ready := False;
       Write_Menu;
+      Write_Sound;
    end Boot;
 
    procedure Advance (Days : Interfaces.Unsigned_32) is
@@ -721,10 +847,12 @@ package body Megacorp.Wasm_Store is
          for I in 1 .. Globe.Regions loop
             if Globe.Area (I).Owner /= Old (I) then
                Note (Save.Log.Region_Set (Snap, Globe, I));
+               Push_Extra (Sound.Kind'Pos (Sound.Blip));
             end if;
          end loop;
       end loop;
       API.Install (Globe, Snap.Day);
+      Write_Sound;
    end Advance;
 
    procedure Reset (Seed : Interfaces.Unsigned_32) is
@@ -732,6 +860,7 @@ package body Megacorp.Wasm_Store is
       Fresh (Seed, Parameters.Auto_Play);
       Menu.Arrive (Card, Menu.Atlas);
       Write_Menu;
+      Write_Sound;
    end Reset;
 
    function Import_Buffer return System.Address is
@@ -863,6 +992,7 @@ package body Megacorp.Wasm_Store is
          return;
       end if;
       Note (Save.Log.Ticks (Positive (Count)));
+      Write_Sound;
    end Play_Ticks;
 
    function City_State return System.Address is
@@ -904,4 +1034,14 @@ package body Megacorp.Wasm_Store is
    begin
       return Interfaces.Unsigned_32 (Menu_Used);
    end Menu_State_Size;
+
+   function Sound_State return System.Address is
+   begin
+      return Sound_Buf'Address;
+   end Sound_State;
+
+   function Sound_State_Size return Interfaces.Unsigned_32 is
+   begin
+      return Interfaces.Unsigned_32 (Sound_Used);
+   end Sound_State_Size;
 end Megacorp.Wasm_Store;

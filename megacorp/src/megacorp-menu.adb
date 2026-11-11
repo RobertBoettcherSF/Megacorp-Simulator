@@ -59,7 +59,7 @@ package body Megacorp.Menu is
          when New_Game =>
             return 6;
          when Settings =>
-            return 7;
+            return 5;
          when Credits =>
             return 1;
          when Briefing =>
@@ -144,18 +144,6 @@ package body Megacorp.Menu is
          when Settings =>
             if Item.Cursor <= 3 then
                Item.Speed := Speed_Of (Item.Cursor);
-            elsif Item.Cursor = 4 then
-               if Item.Volume >= 10 then
-                  Item.Volume := Item.Volume - 10;
-               else
-                  Item.Volume := 0;
-               end if;
-            elsif Item.Cursor = 5 then
-               if Item.Volume <= 90 then
-                  Item.Volume := Item.Volume + 10;
-               else
-                  Item.Volume := 100;
-               end if;
             else
                Item.Where := Title;
                Item.Cursor := 0;
@@ -281,6 +269,14 @@ package body Megacorp.Menu is
          when Set_Volume =>
             if Arg >= 0 and then Arg <= 100 then
                Item.Volume := Arg;
+            end if;
+         when Set_Effects =>
+            if Arg >= 0 and then Arg <= 100 then
+               Item.Effects := Arg;
+            end if;
+         when Set_Music =>
+            if Arg >= 0 and then Arg <= 100 then
+               Item.Music := Arg;
             end if;
          when Roll_Seed =>
             if Item.Where = New_Game then
