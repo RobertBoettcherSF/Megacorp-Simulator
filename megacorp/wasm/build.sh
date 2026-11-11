@@ -41,6 +41,8 @@ set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-contai.ads"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-coinve.ads"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-convec.adb"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-direct.adb"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-strbou.adb"
 "$gcc" "$@" "$root/wasm/runtime/megacorp-host.adb"
 "$gcc" "$@" "$root/src/megacorp.adb"
 "$gcc" "$@" "$root/src/megacorp-parameters.adb"
@@ -59,6 +61,11 @@ set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
 "$gcc" "$@" "$root/src/megacorp-peds.adb"
 "$gcc" "$@" "$root/src/megacorp-vehicles.adb"
 "$gcc" "$@" "$root/src/megacorp-map-gen.adb"
+"$gcc" "$@" "$root/src/megacorp-shots.adb"
+"$gcc" "$@" "$root/src/megacorp-actions.adb"
+"$gcc" "$@" "$root/src/megacorp-behaviour.adb"
+"$gcc" "$@" "$root/src/megacorp-mission.adb"
+"$gcc" "$@" "$root/src/megacorp-mission-gen.adb"
 "$gcc" "$@" "$root/src/megacorp-play.adb"
 "$gcc" "$@" "$root/src/megacorp-save.adb"
 "$gcc" "$@" "$root/src/megacorp-save-migrate.adb"
@@ -85,13 +92,16 @@ wasm-ld --no-entry --export-memory --allow-undefined \
    megacorp.o megacorp-host.o megacorp-parameters.o megacorp-rng.o \
    megacorp-world.o megacorp-world-gen.o megacorp-world-campaign.o \
    megacorp-map.o megacorp-map-gen.o \
-   megacorp-weapons.o megacorp-path.o megacorp-peds.o \
-   megacorp-vehicles.o megacorp-play.o \
+   megacorp-weapons.o megacorp-shots.o megacorp-path.o \
+   megacorp-peds.o megacorp-vehicles.o \
+   megacorp-actions.o megacorp-behaviour.o \
+   megacorp-mission.o megacorp-mission-gen.o megacorp-play.o \
    megacorp-data-virtual_fs.o megacorp-data-virtual_fs-browser.o \
    megacorp-assets-import.o \
    megacorp-save.o megacorp-save-migrate.o megacorp-save-log.o \
    megacorp-api.o megacorp-wasm_store.o \
-   a-chahan.o a-textio.o a-strunb.o a-convec.o s-exctab.o gnat_stub.o \
+   a-chahan.o a-textio.o a-strunb.o a-strbou.o a-direct.o \
+   a-convec.o s-exctab.o gnat_stub.o \
    "$tool/lib/rts-native/adalib/libgnat.a" \
    -o "$repo/web/megacorp.wasm"
 echo "wrote $repo/web/megacorp.wasm"

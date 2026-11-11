@@ -2,16 +2,23 @@
 --  Copyright (c) 2026 Robert Boettcher
 
 with Ada.Unchecked_Deallocation;
+with Megacorp.Actions;
+with Megacorp.Behaviour;
 with Megacorp.Map.Gen;
+with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.Path;
 with Megacorp.Peds;
 with Megacorp.Vehicles;
+with Megacorp.Weapons;
 
 package body Megacorp.Play is
    use type Interfaces.Unsigned_32;
    use type Interfaces.Unsigned_64;
+   use type Behaviour.Role;
    use type Map.Point;
+   use type Mission.Gen.Recipe_Kind;
+   use type Path.Status;
 
    Edge   : constant := Parameters.Default_City_Map_Width;
    Squad  : constant := 6;
@@ -23,12 +30,16 @@ package body Megacorp.Play is
    Buf_Head : constant := 16;
    Buf_Map  : constant := Edge * Edge;
    Buf_Unit : constant := 8;
+   Mission_Cap : constant := 48;
+   Buf_Tail : constant := 64;
    Buf_Limit : constant :=
-     Buf_Head + Buf_Map + (Squad + Fleet_N) * Buf_Unit;
+     Buf_Head + Buf_Map + (Squad + Fleet_N) * Buf_Unit + Buf_Tail;
 
    type Octet is new Interfaces.Unsigned_8;
    type Store is array (0 .. Buf_Limit - 1) of Octet;
    type City_Ref is access Map.City;
+   type Crowd_Ref is access Behaviour.Crowd;
+   type Ending_Kind is (None, Victory, Defeat, Expired);
 
    type Order is record
       Who : Positive := 1;
@@ -65,6 +76,18 @@ package body Megacorp.Play is
    Zoom_N : Positive := 8;
    Buf    : Store := (others => 0);
    Used   : Natural := 0;
+   Mission_Live : Boolean := False;
+   Ending : Ending_Kind := None;
+   Settled : Boolean := False;
+   Focus_Region : Natural := 0;
+   Zone : Map.Point := (X => 1, Y => 1);
+   Cast_N : Natural := 0;
+   Team : Crowd_Ref;
+   Lead : Map.Point := (X => 1, Y => 1);
+   Banner : String (1 .. 48) := (others => ' ');
+   Banner_Len : Natural := 0;
+   Stuff : Actions.Bag (1 .. 1);
+   Motors : Vehicles.Fleet (1 .. 1);
 
    function Trim_Int (Value : Integer) return String;
    function Mix (Hash : RNG.Word; Value : Natural) return RNG.Word;
@@ -86,6 +109,16 @@ package body Megacorp.Play is
    procedure Drive_Cars;
    procedure Wander;
    procedure Step_Once;
+   procedure Mission_Step;
+   function Observe (Index : Positive) return Behaviour.Frame;
+   function Agents_Alive return Natural;
+   function Agent_On_Zone return Boolean;
+   procedure Mission_Order (Index : Positive; Tile : Map.Point);
+   function Mission_Hit (Tile : Map.Point) return Natural;
+   function Drop_In (Plan : Mission.Gen.Scene) return Map.Point;
+   function Distant
+     (Avoid_A, Avoid_B : Map.Point) return Map.Point;
+   function Beside (Origin : Map.Point) return Map.Point;
    function Field (Line : String; Index : Positive) return String;
    function Line_At (Text : String; Number : Positive) return String;
    function Image return String;
@@ -156,9 +189,23 @@ package body Megacorp.Play is
       Put_U16 (Natural (Cam_X));
       Put_U16 (Natural (Cam_Y));
       Put_U8 (Zoom_N);
-      Put_U8 (Squad);
-      Put_U8 (Fleet_N);
-      Put_U8 (0);
+      if Mission_Live then
+         Put_U8 (Cast_N);
+         Put_U8 (0);
+         if Ending = Victory then
+            Put_U8 (2);
+         elsif Ending = Defeat then
+            Put_U8 (3);
+         elsif Ending = Expired then
+            Put_U8 (4);
+         else
+            Put_U8 (1);
+         end if;
+      else
+         Put_U8 (Squad);
+         Put_U8 (Fleet_N);
+         Put_U8 (0);
+      end if;
       Put_U32 (Interfaces.Unsigned_32 (Ticks));
       for Y in 1 .. Ground.Height loop
          for X in 1 .. Ground.Width loop
@@ -166,31 +213,65 @@ package body Megacorp.Play is
             Put_U8 (Map.Terrain'Pos (Cell.Kind));
          end loop;
       end loop;
-      for I in People'Range loop
-         Put_U8 (Peds.Ident (People (I)));
-         Put_U8 (Peds.Tile_X (People (I)));
-         Put_U8 (Peds.Tile_Y (People (I)));
-         Put_U8 (Peds.Along (People (I)));
-         Put_U8 (Map.Eight_Way'Pos (Peds.Facing (People (I))));
-         Put_U8 (Peds.State_Kind'Pos (Peds.State_Of (People (I))));
-         if Chosen (I) then
-            Put_U8 (1);
-         else
+      if Mission_Live and then Team /= null then
+         declare
+            Seen : Behaviour.Frame;
+         begin
+            for I in 1 .. Cast_N loop
+               Seen := Observe (I);
+               Put_U8 (Seen.Ident);
+               Put_U8 (Seen.X);
+               Put_U8 (Seen.Y);
+               Put_U8 (Seen.Along);
+               Put_U8 (Map.Eight_Way'Pos (Seen.Facing));
+               Put_U8 (Peds.State_Kind'Pos (Seen.State));
+               if Chosen (I) then
+                  Put_U8 (1);
+               else
+                  Put_U8 (0);
+               end if;
+               Put_U8 (Seen.Health);
+            end loop;
+         end;
+         Put_U16 (Focus_Region);
+         Put_U16 (Zone.X);
+         Put_U16 (Zone.Y);
+         Put_U8 (Banner_Len);
+         for I in 1 .. 48 loop
+            if I <= Banner_Len then
+               Put_U8 (Character'Pos (Banner (I)));
+            else
+               Put_U8 (0);
+            end if;
+         end loop;
+      end if;
+      if not Mission_Live then
+         for I in People'Range loop
+            Put_U8 (Peds.Ident (People (I)));
+            Put_U8 (Peds.Tile_X (People (I)));
+            Put_U8 (Peds.Tile_Y (People (I)));
+            Put_U8 (Peds.Along (People (I)));
+            Put_U8 (Map.Eight_Way'Pos (Peds.Facing (People (I))));
+            Put_U8 (Peds.State_Kind'Pos (Peds.State_Of (People (I))));
+            if Chosen (I) then
+               Put_U8 (1);
+            else
+               Put_U8 (0);
+            end if;
             Put_U8 (0);
-         end if;
-         Put_U8 (0);
-      end loop;
-      for I in Cars'Range loop
-         Put_U8 (Vehicles.Ident (Cars (I)));
-         Put_U8 (Vehicles.Tile_X (Cars (I)));
-         Put_U8 (Vehicles.Tile_Y (Cars (I)));
-         Put_U8 (Vehicles.Along (Cars (I)));
-         Put_U8 (Map.Eight_Way'Pos (Vehicles.Facing (Cars (I))));
-         Put_U8
-           (Vehicles.State_Kind'Pos (Vehicles.State_Of (Cars (I))));
-         Put_U8 (Vehicles.Kind'Pos (Vehicles.Sort_Of (Cars (I))));
-         Put_U8 (0);
-      end loop;
+         end loop;
+         for I in Cars'Range loop
+            Put_U8 (Vehicles.Ident (Cars (I)));
+            Put_U8 (Vehicles.Tile_X (Cars (I)));
+            Put_U8 (Vehicles.Tile_Y (Cars (I)));
+            Put_U8 (Vehicles.Along (Cars (I)));
+            Put_U8 (Map.Eight_Way'Pos (Vehicles.Facing (Cars (I))));
+            Put_U8
+              (Vehicles.State_Kind'Pos (Vehicles.State_Of (Cars (I))));
+            Put_U8 (Vehicles.Kind'Pos (Vehicles.Sort_Of (Cars (I))));
+            Put_U8 (0);
+         end loop;
+      end if;
    end Publish;
 
    procedure Clamp_Cam is
@@ -340,9 +421,97 @@ package body Megacorp.Play is
       end loop;
    end Wander;
 
+   function Observe (Index : Positive) return Behaviour.Frame is
+   begin
+      return Behaviour.Observe (Team (Index));
+   end Observe;
+
+   function Mission_Hit (Tile : Map.Point) return Natural is
+      Seen : Behaviour.Frame;
+   begin
+      if Team = null then
+         return 0;
+      end if;
+      for I in 1 .. Cast_N loop
+         Seen := Observe (I);
+         if Seen.Alive and then Seen.X = Tile.X and then Seen.Y = Tile.Y then
+            return I;
+         end if;
+      end loop;
+      return 0;
+   end Mission_Hit;
+
+   procedure Mission_Order (Index : Positive; Tile : Map.Point) is
+      Plan : Actions.Action_Array (1 .. 1);
+      Target : Natural;
+   begin
+      Target := Mission_Hit (Tile);
+      if Target > 0
+        and then Observe (Target).Job = Behaviour.Role'Val (3)
+      then
+         Plan (1) := Actions.Make_Shoot
+           (Observe (Target).Ident, Weapons.Kind'First);
+      elsif Map.Tile_At (Ground.all, Tile.X, Tile.Y).Walkable then
+         Plan (1) := Actions.Make_Walk (Tile);
+      else
+         return;
+      end if;
+      Behaviour.Order (Team.all, Index, Plan, Actions.Mode'First);
+   end Mission_Order;
+
+   function Agents_Alive return Natural is
+      Seen : Behaviour.Frame;
+      Total : Natural := 0;
+   begin
+      for I in 1 .. Cast_N loop
+         Seen := Observe (I);
+         if Seen.Job = Behaviour.Role'Val (4) and then Seen.Alive then
+            Total := Total + 1;
+         end if;
+      end loop;
+      return Total;
+   end Agents_Alive;
+
+   function Agent_On_Zone return Boolean is
+      Seen : Behaviour.Frame;
+   begin
+      for I in 1 .. Cast_N loop
+         Seen := Observe (I);
+         if Seen.Job = Behaviour.Role'Val (4)
+           and then Seen.Alive
+           and then Seen.X = Zone.X
+           and then Seen.Y = Zone.Y
+         then
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Agent_On_Zone;
+
+   procedure Mission_Step is
+   begin
+      if Ending /= None then
+         return;
+      end if;
+      Behaviour.Step
+        (Team.all, Ground.all, Stuff, Motors, Ticks + 1);
+      Ticks := Ticks + 1;
+      if Agents_Alive = 0 then
+         Ending := Defeat;
+      elsif Agent_On_Zone then
+         Ending := Victory;
+      elsif Ticks >= Mission_Cap then
+         Ending := Expired;
+      end if;
+   end Mission_Step;
+
    procedure Step_Once is
       Blocks : Path.Block_Lists.Vector;
    begin
+      if Mission_Live then
+         Mission_Step;
+         return;
+      end if;
       Apply_Orders;
       Wander;
       Vehicles.Add_Blocks (Cars, 0, True, Blocks);
@@ -445,6 +614,9 @@ package body Megacorp.Play is
          Car_Y (I) := Roads (I).Y;
       end loop;
       Order_N := 0;
+      Mission_Live := False;
+      Ending := None;
+      Settled := False;
       Ticks := 0;
       Zoom_N := 8;
       Cam_X := Integer (Peds.Tile_X (People (1)))
@@ -454,6 +626,184 @@ package body Megacorp.Play is
       Clamp_Cam;
       Publish;
    end Open;
+
+   function Drop_In (Plan : Mission.Gen.Scene) return Map.Point is
+      Route : constant Path.Result :=
+        Path.Find (Ground.all, Plan.Agent, Plan.Zone, Path.Walk);
+   begin
+      if Path.Kind (Route) = Path.Found
+        and then Path.Length (Route) > 5
+      then
+         return Path.Step (Route, Path.Length (Route) - 4);
+      end if;
+      return Plan.Agent;
+   end Drop_In;
+
+   function Distant
+     (Avoid_A, Avoid_B : Map.Point) return Map.Point
+   is
+      Here : Map.Point;
+   begin
+      for Y in 1 .. Ground.Height loop
+         for X in 1 .. Ground.Width loop
+            if Map.Tile_At (Ground.all, X, Y).Walkable
+              and then (abs (X - Avoid_A.X) > 14
+                        or else abs (Y - Avoid_A.Y) > 14)
+              and then (abs (X - Avoid_B.X) > 14
+                        or else abs (Y - Avoid_B.Y) > 14)
+            then
+               Here := (X => X, Y => Y);
+               return Here;
+            end if;
+         end loop;
+      end loop;
+      return Avoid_A;
+   end Distant;
+
+   function Beside (Origin : Map.Point) return Map.Point is
+      X : Integer;
+      Y : Integer;
+      Seen : Behaviour.Frame;
+      Taken : Boolean;
+   begin
+      for DY in -3 .. 3 loop
+         for DX in -3 .. 3 loop
+            X := Integer (Origin.X) + DX;
+            Y := Integer (Origin.Y) + DY;
+            if Map.In_Bounds (Ground.all, X, Y)
+              and then Map.Tile_At (Ground.all, X, Y).Walkable
+            then
+               Taken := False;
+               for I in 1 .. Cast_N loop
+                  if Team /= null then
+                     Seen := Observe (I);
+                     if Seen.X = Positive (X) and then Seen.Y = Positive (Y)
+                     then
+                        Taken := True;
+                     end if;
+                  end if;
+               end loop;
+               if not Taken then
+                  return (X => Positive (X), Y => Positive (Y));
+               end if;
+            end if;
+         end loop;
+      end loop;
+      return Origin;
+   end Beside;
+
+   procedure Begin_Mission (City_Seed : RNG.Word; Region : Positive) is
+      procedure Free_Team is new Ada.Unchecked_Deallocation
+        (Behaviour.Crowd, Crowd_Ref);
+      Plan : Mission.Gen.Scene;
+      Start : Map.Point;
+      Extra : Map.Point;
+      Squad_N : Positive;
+      Total : Positive;
+      Spot : Map.Point;
+
+      procedure Say (Item : String);
+      procedure Say (Item : String) is
+      begin
+         Banner_Len := Item'Length;
+         Banner (1 .. Banner_Len) := Item;
+      end Say;
+
+      procedure Recruit
+        (Index : Positive;
+         Who : Peds.Ped_Id;
+         Job : Behaviour.Role;
+         At_Point : Map.Point);
+      procedure Recruit
+        (Index : Positive;
+         Who : Peds.Ped_Id;
+         Job : Behaviour.Role;
+         At_Point : Map.Point)
+      is
+      begin
+         Team (Index) := Behaviour.Enlist
+           (Who, Job, At_Point, Ground.all, City_Seed,
+            At_Point, At_Point);
+         Behaviour.Arm (Team.all, Index, Weapons.Kind'First, 12);
+      end Recruit;
+   begin
+      if Ground /= null then
+         Free (Ground);
+      end if;
+      Ground := new Map.City'
+        (Map.Gen.Generate (City_Seed, Edge, Edge));
+      Plan := Mission.Gen.Build (Ground.all, City_Seed);
+      Zone := Plan.Zone;
+      Start := Drop_In (Plan);
+      if not Map.Tile_At (Ground.all, Start.X, Start.Y).Walkable then
+         Start := Plan.Agent;
+      end if;
+      Squad_N := 1;
+      if Plan.Squad > 1 and then Plan.Squad < 4 then
+         Squad_N := Plan.Squad;
+      elsif Plan.Squad >= 4 then
+         Squad_N := 4;
+      end if;
+      Total := Squad_N + 2;
+      if Team /= null then
+         Free_Team (Team);
+      end if;
+      Team := new Behaviour.Crowd (1 .. Total);
+      Cast_N := 0;
+      Lead := Start;
+      Recruit (1, 1, Behaviour.Role'Val (4), Start);
+      Cast_N := 1;
+      for I in 2 .. Squad_N loop
+         Extra := Beside (Start);
+         Recruit (I, Peds.Ped_Id (I), Behaviour.Role'Val (4), Extra);
+         Cast_N := I;
+      end loop;
+      Spot := Distant (Start, Zone);
+      if not Map.Tile_At (Ground.all, Spot.X, Spot.Y).Walkable then
+         Spot := Start;
+      end if;
+      Recruit
+        (Squad_N + 1, Peds.Ped_Id (Squad_N + 1),
+         Behaviour.Role'Val (3), Spot);
+      Cast_N := Squad_N + 1;
+      Spot := Distant (Zone, Lead);
+      Recruit
+        (Squad_N + 2, Peds.Ped_Id (Squad_N + 2),
+         Behaviour.Role'Val (2), Spot);
+      Cast_N := Total;
+      Find_Road :
+      for Y in 1 .. Ground.Height loop
+         for X in 1 .. Ground.Width loop
+            if Map.Tile_At (Ground.all, X, Y).Drivable then
+               Motors (1) := Vehicles.Park
+                 (1, Vehicles.Kind'First,
+                  (X => X, Y => Y), Ground.all);
+               exit Find_Road;
+            end if;
+         end loop;
+      end loop Find_Road;
+      if Plan.Kind = Mission.Gen.Recipe_Kind'First then
+         Say ("Reach the zone");
+      elsif Plan.Kind = Mission.Gen.Recipe_Kind'Succ
+        (Mission.Gen.Recipe_Kind'First)
+      then
+         Say ("Sabotage the building");
+      else
+         Say ("Escort to the zone");
+      end if;
+      Mission_Live := True;
+      Ending := None;
+      Settled := False;
+      Focus_Region := Region;
+      Ticks := 0;
+      Order_N := 0;
+      Chosen := (others => False);
+      Zoom_N := 8;
+      Cam_X := Integer (Start.X) - (View_W / Zoom_N) / 2;
+      Cam_Y := Integer (Start.Y) - (View_H / Zoom_N) / 2;
+      Clamp_Cam;
+      Publish;
+   end Begin_Mission;
 
    procedure Handle (Code, A, B, C, D, E : Integer) is
       pragma Unreferenced (E);
@@ -466,6 +816,18 @@ package body Megacorp.Play is
       Right : Positive;
       Bottom : Positive;
    begin
+      if Code = 6 then
+         declare
+            Seed : RNG.Word;
+         begin
+            if A < 1 or else B < 0 or else C < 0 then
+               return;
+            end if;
+            Seed := RNG.Word (B) + RNG.Word (C) * 2 ** 31;
+            Begin_Mission (Seed, Positive (A));
+         end;
+         return;
+      end if;
       if Ground = null then
          return;
       end if;
@@ -476,16 +838,42 @@ package body Megacorp.Play is
                Publish;
                return;
             end if;
-            Hit := Ped_At (Tile.X, Tile.Y);
-            if Hit > 0 then
-               Chosen := (others => False);
-               Chosen (Hit) := True;
+            if Mission_Live then
+               Hit := Mission_Hit (Tile);
+               if Hit > 0
+                 and then Observe (Hit).Job = Behaviour.Role'Val (4)
+               then
+                  Chosen := (others => False);
+                  Chosen (Hit) := True;
+               elsif Hit > 0
+                 and then Observe (Hit).Job = Behaviour.Role'Val (3)
+               then
+                  for I in 1 .. Cast_N loop
+                     if Chosen (I) then
+                        Mission_Order (I, Tile);
+                     end if;
+                  end loop;
+               else
+                  for I in 1 .. Cast_N loop
+                     if Chosen (I)
+                       and then Observe (I).Job = Behaviour.Role'Val (4)
+                     then
+                        Mission_Order (I, Tile);
+                     end if;
+                  end loop;
+               end if;
             else
-               for I in People'Range loop
-                  if Chosen (I) then
-                     Queue_Move (I, Tile);
-                  end if;
-               end loop;
+               Hit := Ped_At (Tile.X, Tile.Y);
+               if Hit > 0 then
+                  Chosen := (others => False);
+                  Chosen (Hit) := True;
+               else
+                  for I in People'Range loop
+                     if Chosen (I) then
+                        Queue_Move (I, Tile);
+                     end if;
+                  end loop;
+               end if;
             end if;
          when 2 =>
             Pixel_Tile (A, B, Tile, Inside);
@@ -575,13 +963,82 @@ package body Megacorp.Play is
 
    function Actor_X (Index : Positive) return Positive is
    begin
+      if Mission_Live and then Index <= Cast_N then
+         return Observe (Index).X;
+      end if;
       return Peds.Tile_X (People (Index));
    end Actor_X;
 
    function Actor_Y (Index : Positive) return Positive is
    begin
+      if Mission_Live and then Index <= Cast_N then
+         return Observe (Index).Y;
+      end if;
       return Peds.Tile_Y (People (Index));
    end Actor_Y;
+
+   function Mission_Ending return Natural is
+   begin
+      if not Mission_Live then
+         return 0;
+      elsif Ending = Victory then
+         return 2;
+      elsif Ending = Defeat then
+         return 3;
+      elsif Ending = Expired then
+         return 4;
+      end if;
+      return 1;
+   end Mission_Ending;
+
+   function Mission_Region return Natural is
+   begin
+      return Focus_Region;
+   end Mission_Region;
+
+   function Zone_X return Positive is
+   begin
+      return Zone.X;
+   end Zone_X;
+
+   function Zone_Y return Positive is
+   begin
+      return Zone.Y;
+   end Zone_Y;
+
+   function Needs_Settle return Boolean is
+   begin
+      return Mission_Live and then Ending /= None and then not Settled;
+   end Needs_Settle;
+
+   procedure Settle
+     (Item : in out World.Atlas;
+      Snap : in out Save.Snapshot)
+   is
+   begin
+      if not Needs_Settle then
+         return;
+      end if;
+      if Focus_Region < 1 or else Focus_Region > Item.Regions then
+         Settled := True;
+         return;
+      end if;
+      Settled := True;
+      Snap.Area (Focus_Region).Visited := True;
+      if Ending = Victory then
+         Item.Area (Focus_Region).Owner := 1;
+         Item.Area (Focus_Region).Unrest := 0;
+         if Item.Area (Focus_Region).Defence <= 85 then
+            Item.Area (Focus_Region).Defence :=
+              Item.Area (Focus_Region).Defence + 15;
+         end if;
+      elsif Item.Area (Focus_Region).Unrest <= 75 then
+         Item.Area (Focus_Region).Unrest :=
+           Item.Area (Focus_Region).Unrest + 25;
+      else
+         Item.Area (Focus_Region).Unrest := 100;
+      end if;
+   end Settle;
 
    function Pixel_X (Tile : Positive) return Integer is
    begin
@@ -626,6 +1083,9 @@ package body Megacorp.Play is
          return 0;
       end if;
       Hash := Mix (Hash, Ticks);
+      Hash := Mix (Hash, Ending_Kind'Pos (Ending));
+      Hash := Mix (Hash, Zone.X);
+      Hash := Mix (Hash, Zone.Y);
       Hash := Mix (Hash, Natural (Cam_X));
       Hash := Mix (Hash, Natural (Cam_Y));
       Hash := Mix (Hash, Zoom_N);

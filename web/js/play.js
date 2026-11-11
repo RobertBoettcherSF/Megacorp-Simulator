@@ -59,7 +59,22 @@ const MegacorpPlay = (() => {
       });
       cursor += 8;
     }
-    return { width, height, camX, camY, zoom, tick, terrain, people, fleet };
+    const mode = view.getUint8(base + 11);
+    let mission = null;
+    if (mode > 0 && cursor + 7 < view.byteLength) {
+      const region = view.getUint16(cursor, true);
+      const zoneX = view.getUint16(cursor + 2, true);
+      const zoneY = view.getUint16(cursor + 4, true);
+      const textLen = view.getUint8(cursor + 6);
+      let text = "";
+      for (let i = 0; i < textLen; i += 1) {
+        text += String.fromCharCode(view.getUint8(cursor + 7 + i));
+      }
+      mission = { mode, region, zoneX, zoneY, text };
+    }
+    return {
+      width, height, camX, camY, zoom, tick, terrain, people, fleet, mission
+    };
   }
 
   function center(unit, camX, camY, zoom) {
@@ -99,6 +114,22 @@ const MegacorpPlay = (() => {
         ctx.fillStyle = ground[kind] || ground[0];
         ctx.fillRect(x * city.zoom, y * city.zoom, city.zoom, city.zoom);
       }
+    }
+    const banner = document.getElementById("objective");
+    if (banner && city.mission && city.mission.text) {
+      const names = { 1: "Mission", 2: "Won", 3: "Lost", 4: "Lost" };
+      banner.textContent =
+        `${names[city.mission.mode] || "Mission"}: ${city.mission.text}`;
+    }
+    if (city.mission && city.mission.zoneX) {
+      ctx.strokeStyle = "#f2d36b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        (city.mission.zoneX - city.camX) * city.zoom + 1,
+        (city.mission.zoneY - city.camY) * city.zoom + 1,
+        city.zoom - 2,
+        city.zoom - 2
+      );
     }
     const units = [];
     city.people.forEach((ped) => {
@@ -158,14 +189,30 @@ const MegacorpPlay = (() => {
     if (label) {
       label.textContent = String(city.tick);
     }
+    const missionGoal = city.mission && city.mission.zoneX ? {
+      x: city.mission.zoneX,
+      y: city.mission.zoneY,
+      px: (city.mission.zoneX - city.camX) * city.zoom + city.zoom / 2,
+      py: (city.mission.zoneY - city.camY) * city.zoom + city.zoom / 2
+    } : goal;
     window.__city = {
       tick: city.tick,
       zoom: city.zoom,
       camX: city.camX,
       camY: city.camY,
       units,
-      goal
+      goal: missionGoal,
+      mission: city.mission
     };
+    if (city.mission && city.mission.mode >= 2 && window.readWasmWorld) {
+      window.__world = window.readWasmWorld();
+      if (window.showWasmDay) {
+        window.showWasmDay();
+      }
+      if (window.draw) {
+        window.draw();
+      }
+    }
   }
 
   function send(code, a, b, c, d, e) {

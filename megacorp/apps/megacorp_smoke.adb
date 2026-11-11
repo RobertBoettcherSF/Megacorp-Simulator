@@ -55,9 +55,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.22.0"
+     (Megacorp.Version = "0.23.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.22.0");
+      "version 0.23.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -163,6 +163,121 @@ begin
       Smoke_Check.Expect
         (Again = First,
          "a replayed command sequence gives the same digest");
+   end;
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Globe renames Megacorp.World.Gen;
+
+      function Low (Value : Megacorp.RNG.Word) return Integer;
+      function High (Value : Megacorp.RNG.Word) return Integer;
+      function Low (Value : Megacorp.RNG.Word) return Integer is
+      begin
+         return Integer (Value and 16#7FFF_FFFF#);
+      end Low;
+      function High (Value : Megacorp.RNG.Word) return Integer is
+      begin
+         return Integer ((Value / 2 ** 31) and 16#7FFF_FFFF#);
+      end High;
+
+      Root : Native.Disk := Native.Open ("/tmp/megacorp-play");
+      World : Megacorp.World.Atlas;
+      Again : Megacorp.World.Atlas;
+      Snap : Megacorp.Save.Snapshot;
+      Book : Megacorp.Save.Log.Journal;
+      Region : Positive;
+      City : Megacorp.RNG.Word;
+      First : Megacorp.RNG.Word;
+      Second : Megacorp.RNG.Word;
+   begin
+      World := Globe.Generate (42, Defaults);
+      Region := 1;
+      for I in 1 .. World.Regions loop
+         if World.Area (I).Owner /= 1 then
+            Region := I;
+            exit;
+         end if;
+      end loop;
+      City := World.Area (Region).City;
+      Snap := Megacorp.Save.Capture
+        (World, 0, Megacorp.Parameters.Auto_Play);
+      Book := Megacorp.Save.Log.Start (Root, "mission.log", Snap);
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Order
+           (6, Region, Low (City), High (City), 0, 0));
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Order
+           (1,
+            Megacorp.Play.Pixel_X (Megacorp.Play.Actor_X (1)),
+            Megacorp.Play.Pixel_Y (Megacorp.Play.Actor_Y (1)),
+            0, 0, 0));
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Order
+           (1,
+            Megacorp.Play.Pixel_X (Megacorp.Play.Zone_X),
+            Megacorp.Play.Pixel_Y (Megacorp.Play.Zone_Y),
+            0, 0, 0));
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Ticks (32));
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Ticks (16));
+      Smoke_Check.Expect
+        (Megacorp.Play.Mission_Ending = 2,
+         "a scripted walk wins the mission");
+      First := Megacorp.Play.Digest;
+      Megacorp.Play.Settle (World, Snap);
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Mission_Done
+           (Region, Megacorp.Save.Mission_Outcome'First,
+            Megacorp.Play.Clock));
+      Megacorp.Save.Log.Commit
+        (Root, "mission.log", Snap, World, Book,
+         Megacorp.Save.Log.Region_Set (Snap, World, Region));
+      Smoke_Check.Expect
+        (World.Area (Region).Owner = 1
+         and then Snap.Area (Region).Visited,
+         "a win takes the region and marks it visited");
+      Again := Globe.Generate (42, Defaults);
+      Snap := Megacorp.Save.Capture
+        (Again, 0, Megacorp.Parameters.Auto_Play);
+      Megacorp.Save.Log.Replay (Snap, Again, Book);
+      Second := Megacorp.Play.Digest;
+      Smoke_Check.Expect
+        (Second = First
+         and then Again.Area (Region).Owner = 1
+         and then Snap.Area (Region).Visited,
+         "a scripted win replays to the same digest");
+      declare
+         Base : Megacorp.Save.Snapshot := Snap;
+      begin
+         Book := Megacorp.Save.Log.Start (Root, "loss.log", Base);
+         Megacorp.Save.Log.Commit
+           (Root, "loss.log", Snap, Again, Book,
+            Megacorp.Save.Log.Order
+              (6, Region, Low (City), High (City), 0, 0));
+         Megacorp.Save.Log.Commit
+           (Root, "loss.log", Snap, Again, Book,
+            Megacorp.Save.Log.Ticks (32));
+         Megacorp.Save.Log.Commit
+           (Root, "loss.log", Snap, Again, Book,
+            Megacorp.Save.Log.Ticks (16));
+         Smoke_Check.Expect
+           (Megacorp.Play.Mission_Ending = 4,
+            "standing still loses the mission");
+         First := Megacorp.Play.Digest;
+         Again := Globe.Generate (42, Defaults);
+         Megacorp.Save.Restore (Base, Again);
+         Megacorp.Save.Log.Replay (Base, Again, Book);
+         Smoke_Check.Expect
+           (Megacorp.Play.Digest = First
+            and then Again.Area (Region).Owner = Base.Area (Region).Owner,
+            "a scripted loss replays to the same digest");
+      end;
    end;
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4

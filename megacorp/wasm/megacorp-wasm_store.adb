@@ -13,6 +13,8 @@ with Megacorp.Save.Log;
 with Megacorp.World.Gen;
 
 package body Megacorp.Wasm_Store is
+   use type RNG.Word;
+
    package Host_Files renames Megacorp.Data.Virtual_FS.Browser;
 
    Files : Host_Files.Disk := Host_Files.Open;
@@ -43,9 +45,30 @@ package body Megacorp.Wasm_Store is
    end Open_City;
 
    procedure Note (Ev : Save.Log.Event) is
+      Result : Save.Mission_Outcome;
    begin
       Save.Log.Commit
         (Files, "slot.log", Snap, Globe, Book, Ev);
+      if Play.Needs_Settle then
+         Play.Settle (Globe, Snap);
+         if Play.Mission_Ending = 2 then
+            Result := Save.Mission_Outcome'First;
+         elsif Play.Mission_Ending = 4 then
+            Result := Save.Mission_Outcome'Last;
+         else
+            Result := Save.Mission_Outcome'Succ
+              (Save.Mission_Outcome'First);
+         end if;
+         Save.Log.Commit
+           (Files, "slot.log", Snap, Globe, Book,
+            Save.Log.Mission_Done
+              (Positive (Play.Mission_Region), Result, Play.Clock));
+         Save.Log.Commit
+           (Files, "slot.log", Snap, Globe, Book,
+            Save.Log.Region_Set
+              (Snap, Globe, Positive (Play.Mission_Region)));
+         API.Install (Globe, Snap.Day);
+      end if;
       if Save.Log.Due (Book) then
          if Play.Ready then
             Play.Write (Files, "city.mgc");
@@ -156,8 +179,24 @@ package body Megacorp.Wasm_Store is
    end Commit_Asset;
 
    procedure Command (Code, A, B, C, D, E : Integer) is
+      Region : Positive;
+      Seed : RNG.Word;
+      Lo : Integer;
+      Hi : Integer;
    begin
-      Note (Save.Log.Order (Code, A, B, C, D, E));
+      if Code = 6
+        and then A >= 1
+        and then A <= Globe.Regions
+      then
+         Region := Positive (A);
+         Seed := Globe.Area (Region).City;
+         Lo := Integer (Seed and 16#7FFF_FFFF#);
+         Hi := Integer
+           ((Seed / 2 ** 31) and 16#7FFF_FFFF#);
+         Note (Save.Log.Order (6, Region, Lo, Hi, 0, 0));
+      else
+         Note (Save.Log.Order (Code, A, B, C, D, E));
+      end if;
    end Command;
 
    procedure Play_Ticks (Count : Interfaces.Unsigned_32) is

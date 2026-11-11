@@ -12,12 +12,19 @@ package Ada.Text_IO is
       Mode : File_Mode;
       Name : String);
 
+   procedure Open
+     (File : in out File_Type;
+      Mode : File_Mode;
+      Name : String);
+
    procedure Close (File : in out File_Type);
    procedure Put (File : File_Type; Item : String);
    procedure Put_Line (File : File_Type; Item : String);
    procedure Put_Line (Item : String);
    procedure New_Line (File : File_Type);
    function Is_Open (File : File_Type) return Boolean;
+   function End_Of_File (File : File_Type) return Boolean;
+   function Get_Line (File : File_Type) return String;
 
 private
    type File_Type is record

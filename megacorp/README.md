@@ -1,9 +1,8 @@
-# Megacorp Simulator 0.22.0
+# Megacorp Simulator 0.23.0
 
-Headless Ada core for Megacorp Simulator. Version 0.22.0 runs the
-world in the browser and ticks a live city from the same module
-(design item 22). Item 12, the C++ comparison, stays skipped, so
-there is no 0.12.0.
+Headless Ada core for Megacorp Simulator. Version 0.23.0 runs a
+playable mission from the world map (design item 23). Item 12, the
+C++ comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -47,7 +46,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.22.0.zip` for
+It also writes `dist/megacorp_v0.23.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -82,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.22.0 contains
+## What 0.23.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -146,7 +145,13 @@ city, 128 by 128, with people and cars moving. A fixed Ada tick
 is driven from the animation frame. Pause, 1x, 2x, and 4x set
 how many of those ticks run. A tap, a drag, a pinch, or an arrow
 key is a command. Ada selects, orders the walk, and moves the
-camera. The command is a line in the delta log.
+camera. The command is a line in the delta log. Clicking a region starts
+that city's recipe: a squad of up to four agents and an objective
+to reach a zone, escort to it, or sabotage the marked building.
+An enemy guard and a police officer use the behaviour from item 10.
+Tap an enemy to attack. Winning gives the region to the player and
+lowers unrest. Losing raises unrest. Either way the region is
+visited, so free play will not re-roll it.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads
