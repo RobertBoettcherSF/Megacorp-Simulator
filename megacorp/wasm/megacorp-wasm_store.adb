@@ -1,6 +1,7 @@
 --  SPDX-License-Identifier: MIT
 --  Copyright (c) 2026 Robert Boettcher
 
+with Megacorp.Agents;
 with Megacorp.API;
 with Megacorp.Assets.Import;
 with Megacorp.Data.Virtual_FS;
@@ -8,9 +9,12 @@ with Megacorp.Data.Virtual_FS.Browser;
 with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.Play;
+with Megacorp.Research;
 with Megacorp.RNG;
 with Megacorp.Save;
 with Megacorp.Save.Log;
+with Megacorp.Session;
+with Megacorp.Weapons;
 with Megacorp.World.Campaign;
 with Megacorp.World.Gen;
 
@@ -26,10 +30,13 @@ package body Megacorp.Wasm_Store is
 
    Cap : constant := 65536;
    Brief_Max : constant := 2048;
+   Office_Max : constant := 1024;
    type Octet is new Interfaces.Unsigned_8;
    Import_Buf : array (1 .. Cap) of Octet := (others => 0);
    Brief_Buf : array (0 .. Brief_Max - 1) of Octet := (others => 0);
    Brief_Used : Natural := 0;
+   Office_Buf : array (0 .. Office_Max - 1) of Octet := (others => 0);
+   Office_Used : Natural := 0;
 
    procedure Fresh (Seed : Interfaces.Unsigned_32);
    procedure Note (Ev : Save.Log.Event);
@@ -37,6 +44,11 @@ package body Megacorp.Wasm_Store is
    procedure Put_B (Value : Natural);
    procedure Put_I16 (Value : Integer);
    procedure Put_Name (Item : String);
+   procedure Put_O (Value : Natural);
+   procedure Put_U16 (Value : Natural);
+   procedure Put_I32 (Value : Integer);
+   procedure Put_Fixed (Item : String; Width : Natural);
+   procedure Write_Office;
 
    procedure Put_B (Value : Natural) is
    begin
@@ -64,6 +76,125 @@ package body Megacorp.Wasm_Store is
       Put_B (Stored mod 256);
       Put_B (Stored / 256);
    end Put_I16;
+
+   procedure Put_O (Value : Natural) is
+   begin
+      if Office_Used >= Office_Max then
+         return;
+      end if;
+      Office_Buf (Office_Used) := Octet (Value mod 256);
+      Office_Used := Office_Used + 1;
+   end Put_O;
+
+   procedure Put_U16 (Value : Natural) is
+      Stored : Natural := Value;
+   begin
+      if Stored > 65535 then
+         Stored := 65535;
+      end if;
+      Put_O (Stored mod 256);
+      Put_O (Stored / 256);
+   end Put_U16;
+
+   procedure Put_I32 (Value : Integer) is
+      Bits : Interfaces.Unsigned_32;
+      use type Interfaces.Unsigned_32;
+   begin
+      if Value >= 0 then
+         Bits := Interfaces.Unsigned_32 (Value);
+      else
+         Bits := 0 - Interfaces.Unsigned_32 (-Value);
+      end if;
+      for Drop in 1 .. 4 loop
+         Put_O (Natural (Bits and 16#FF#));
+         Bits := Bits / 256;
+      end loop;
+   end Put_I32;
+
+   procedure Put_Fixed (Item : String; Width : Natural) is
+      Last : Natural := Item'Length;
+   begin
+      if Last > Width then
+         Last := Width;
+      end if;
+      Put_O (Last);
+      for I in 1 .. Width loop
+         if I <= Last then
+            Put_O (Character'Pos (Item (Item'First + I - 1)));
+         else
+            Put_O (0);
+         end if;
+      end loop;
+   end Put_Fixed;
+
+   procedure Write_Office is
+      Next : Agents.Operative;
+   begin
+      Office_Used := 0;
+      Put_O (1);
+      Put_I32 (Snap.Funds);
+      Put_U16 (Snap.Company (1).Research);
+      Put_U16 (Snap.Grant);
+      if Session.In_Debt (Snap) then
+         Put_O (1);
+      else
+         Put_O (0);
+      end if;
+      Put_O (Snap.Roster_Count);
+      if Session.Can_Hire (Snap) then
+         Put_O (1);
+      else
+         Put_O (0);
+      end if;
+      Put_U16 (Session.Hire_Price);
+      Put_U16 (Session.Upkeep (Snap));
+      Put_U16 (Session.Income_Of (Globe));
+      for Item in Research.Branch loop
+         if Snap.Known (Item) then
+            Put_O (1);
+         else
+            Put_O (0);
+         end if;
+         Put_U16 (Research.Cost (Item));
+         Put_Fixed (Research.Token (Item), 8);
+      end loop;
+      for I in 1 .. Snap.Roster_Count loop
+         if Snap.Roster (I).Alive then
+            Put_O (1);
+         else
+            Put_O (0);
+         end if;
+         Put_O (Snap.Roster (I).Health);
+         Put_O (Snap.Roster (I).Accuracy);
+         Put_O (Snap.Roster (I).Speed);
+         Put_O (Snap.Roster (I).Morale);
+         Put_O (Snap.Roster (I).Augments);
+         Put_O (Weapons.Kind'Pos (Snap.Roster (I).Gun));
+         Put_O (Snap.Roster (I).Armour);
+         Put_Fixed (Agents.Name_Of (Snap.Roster (I)), 12);
+         Put_Fixed (Weapons.Token (Snap.Roster (I).Gun), 6);
+      end loop;
+      for I in Snap.Pick'Range loop
+         Put_O (Snap.Pick (I));
+      end loop;
+      if Snap.Roster_Count < Agents.Max_Roster then
+         Put_O (1);
+         Next := Agents.Person
+           (Snap.Seed, Snap.Roster_Count + 1);
+         Put_Fixed (Agents.Name_Of (Next), 12);
+         Put_O (Next.Health);
+         Put_O (Next.Accuracy);
+         Put_O (Next.Speed);
+         Put_O (Next.Morale);
+      else
+         Put_O (0);
+         Put_Fixed ("", 12);
+         Put_O (0);
+         Put_O (0);
+         Put_O (0);
+         Put_O (0);
+      end if;
+   end Write_Office;
 
    procedure Put_Name (Item : String) is
       Last : Natural;
@@ -148,6 +279,7 @@ package body Megacorp.Wasm_Store is
             end loop;
          end;
       end loop;
+      Write_Office;
    end Refresh;
    procedure Open_City;
    function Base_Name (Name : String) return String;
@@ -188,6 +320,10 @@ package body Megacorp.Wasm_Store is
            (Files, "slot.log", Snap, Globe, Book,
             Save.Log.Region_Set
               (Snap, Globe, Positive (Play.Mission_Region)));
+         Save.Log.Commit
+           (Files, "slot.log", Snap, Globe, Book,
+            Save.Log.Payoff
+              (Positive (Play.Mission_Region), Result));
          API.Install (Globe, Snap.Day);
       end if;
       Refresh;
@@ -318,6 +454,35 @@ package body Megacorp.Wasm_Store is
       Lo : Integer;
       Hi : Integer;
    begin
+      if Code = 7 then
+         if Session.Can_Hire (Snap) then
+            Note (Save.Log.Hire_Agent (Snap));
+         end if;
+         return;
+      elsif Code = 8 then
+         if A = 0 or else A = Session.Grant_Low
+           or else A = Session.Grant_High
+         then
+            Note (Save.Log.Set_Grant (Natural (A)));
+         end if;
+         return;
+      elsif Code = 9 then
+         if A >= 1 and then B >= 1 and then B <= 4
+           and then Session.Can_Fit
+             (Snap, Positive (A), Positive (B))
+         then
+            Note (Save.Log.Fit_Gear (Positive (A), Positive (B)));
+         end if;
+         return;
+      elsif Code = 10 then
+         if A >= 1 and then A <= Agents.Squad_Slots and then B >= 0
+           and then Session.Can_Assign
+             (Snap, Positive (A), Natural (B))
+         then
+            Note (Save.Log.Pick_Squad (Positive (A), Natural (B)));
+         end if;
+         return;
+      end if;
       if Code = 6
         and then A >= 1
         and then A <= Globe.Regions
@@ -361,4 +526,14 @@ package body Megacorp.Wasm_Store is
    begin
       return Interfaces.Unsigned_32 (Brief_Used);
    end Brief_Size;
+
+   function Office return System.Address is
+   begin
+      return Office_Buf'Address;
+   end Office;
+
+   function Office_Size return Interfaces.Unsigned_32 is
+   begin
+      return Interfaces.Unsigned_32 (Office_Used);
+   end Office_Size;
 end Megacorp.Wasm_Store;

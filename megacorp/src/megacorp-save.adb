@@ -4,10 +4,12 @@
 with Ada.Strings.Unbounded;
 with Megacorp.Host;
 with Megacorp.Save.Migrate;
+with Megacorp.Weapons;
 
 package body Megacorp.Save is
    use type Map.Terrain;
    use type Parameters.Play_Mode;
+   use type Weapons.Kind;
 
    Basis : constant RNG.Word := 16#CBF2_9CE4_8422_2325#;
    Prime : constant RNG.Word := 16#0000_0100_0000_01B3#;
@@ -39,6 +41,7 @@ package body Megacorp.Save is
    function Stamp_Image (Snap : Snapshot) return String;
    procedure Set_Stamp (Snap : in out Snapshot; Text : String);
    function Decode (Payload : String) return Snapshot;
+   function Gun_Of (Text : String) return Weapons.Kind;
    function Field (Line : String; Index : Positive) return String;
    function Head (Text : String) return Character;
    function Line_Of
@@ -342,6 +345,38 @@ package body Megacorp.Save is
             & " " & Trim (Snap.Mission (I).Tick)
             & ASCII.LF);
       end loop;
+      if not Legacy then
+         Text := Add (Text, "funds " & Trim (Snap.Funds) & ASCII.LF);
+         Text := Add (Text, "grant " & Trim (Snap.Grant) & ASCII.LF);
+         Text := Add
+           (Text, "roster " & Trim (Snap.Roster_Count) & ASCII.LF);
+         for I in 1 .. Snap.Roster_Count loop
+            Text := Add
+              (Text,
+               "op " & Agents.Name_Of (Snap.Roster (I))
+               & " " & Trim (Snap.Roster (I).Health)
+               & " " & Trim (Snap.Roster (I).Accuracy)
+               & " " & Trim (Snap.Roster (I).Speed)
+               & " " & Trim (Snap.Roster (I).Morale)
+               & " " & Trim (Snap.Roster (I).Augments)
+               & " " & Weapons.Token (Snap.Roster (I).Gun)
+               & " " & Trim (Snap.Roster (I).Armour)
+               & " " & Bit (Snap.Roster (I).Alive)
+               & ASCII.LF);
+         end loop;
+         Text := Add
+           (Text,
+            "picks " & Trim (Snap.Pick (1))
+            & " " & Trim (Snap.Pick (2))
+            & " " & Trim (Snap.Pick (3))
+            & " " & Trim (Snap.Pick (4))
+            & ASCII.LF);
+         Text := Add (Text, "unlock");
+         for Item in Research.Branch loop
+            Text := Add (Text, " " & Bit (Snap.Known (Item)));
+         end loop;
+         Text := Add (Text, (1 => ASCII.LF));
+      end if;
       return Ada.Strings.Unbounded.To_String (Text);
    end Encode;
 
@@ -390,6 +425,18 @@ package body Megacorp.Save is
       end loop;
       return "";
    end Line_Of;
+
+   function Gun_Of (Text : String) return Weapons.Kind is
+   begin
+      if Text = "pistol" then
+         return Weapons.Pistol;
+      elsif Text = "smg" then
+         return Weapons.SMG;
+      elsif Text = "rifle" then
+         return Weapons.Rifle;
+      end if;
+      raise Save_Error with "not a Megacorp save";
+   end Gun_Of;
 
    function Decode (Payload : String) return Snapshot is
       Snap : Snapshot;
@@ -538,6 +585,80 @@ package body Megacorp.Save is
             end loop;
          end if;
       end;
+      Cursor := Cursor + 1;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor);
+      begin
+         if Field (Mark, 1) /= "funds" then
+            raise Save_Error with "not a Megacorp save";
+         end if;
+         Snap.Funds := Integer'Value (Field (Mark, 2));
+      end;
+      Cursor := Cursor + 1;
+      Snap.Grant :=
+        Natural'Value (Field (Line_Of (Payload, Cursor), 2));
+      Cursor := Cursor + 1;
+      Count := Natural'Value (Field (Line_Of (Payload, Cursor), 2));
+      if Count > Agents.Max_Roster then
+         raise Save_Error with "not a Megacorp save";
+      end if;
+      Snap.Roster_Count := Count;
+      for I in 1 .. Snap.Roster_Count loop
+         Cursor := Cursor + 1;
+         declare
+            Row : constant String := Line_Of (Payload, Cursor);
+            Title : constant String := Field (Row, 2);
+         begin
+            if Title'Length = 0
+              or else Title'Length > Agents.Name_Max
+            then
+               raise Save_Error with "not a Megacorp save";
+            end if;
+            Snap.Roster (I).Name := (others => ' ');
+            Snap.Roster (I).Name_Len := Title'Length;
+            Snap.Roster (I).Name (1 .. Title'Length) := Title;
+            Snap.Roster (I).Health :=
+              Natural'Value (Field (Row, 3));
+            Snap.Roster (I).Accuracy :=
+              Natural'Value (Field (Row, 4));
+            Snap.Roster (I).Speed :=
+              Natural'Value (Field (Row, 5));
+            Snap.Roster (I).Morale :=
+              Natural'Value (Field (Row, 6));
+            Snap.Roster (I).Augments :=
+              Natural'Value (Field (Row, 7));
+            Snap.Roster (I).Gun := Gun_Of (Field (Row, 8));
+            Snap.Roster (I).Armour :=
+              Natural'Value (Field (Row, 9));
+            Snap.Roster (I).Alive :=
+              Flag (Head (Field (Row, 10)));
+         end;
+      end loop;
+      Cursor := Cursor + 1;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor);
+      begin
+         if Field (Mark, 1) /= "picks" then
+            raise Save_Error with "not a Megacorp save";
+         end if;
+         for I in Snap.Pick'Range loop
+            Snap.Pick (I) :=
+              Natural'Value (Field (Mark, I + 1));
+         end loop;
+      end;
+      Cursor := Cursor + 1;
+      declare
+         Mark : constant String := Line_Of (Payload, Cursor);
+      begin
+         if Field (Mark, 1) /= "unlock" then
+            raise Save_Error with "not a Megacorp save";
+         end if;
+         for Item in Research.Branch loop
+            Snap.Known (Item) := Flag
+              (Head (Field
+                 (Mark, Research.Branch'Pos (Item) + 2)));
+         end loop;
+      end;
       return Snap;
    end Decode;
 
@@ -561,6 +682,13 @@ package body Megacorp.Save is
          Snap.Agent (I).Region := Item.Company (1).Home;
       end loop;
       Take (Snap, Item, Day);
+      Snap.Funds := 1500;
+      Snap.Grant := 0;
+      Snap.Roster_Count := 2;
+      Snap.Roster (1) := Agents.Person (Item.Seed, 1);
+      Snap.Roster (2) := Agents.Person (Item.Seed, 2);
+      Snap.Pick := (1, 2, 0, 0);
+      Snap.Known := (others => False);
       return Snap;
    end Capture;
 
@@ -800,6 +928,9 @@ package body Megacorp.Save is
         or else Left.Patches /= Right.Patches
         or else Left.Squad /= Right.Squad
         or else Left.Missions /= Right.Missions
+        or else Left.Funds /= Right.Funds
+        or else Left.Grant /= Right.Grant
+        or else Left.Roster_Count /= Right.Roster_Count
         or else Left.Algorithm /= Right.Algorithm
         or else Left.Stamp_Len /= Right.Stamp_Len
         or else (Left.Stamp_Len > 0
@@ -859,6 +990,35 @@ package body Megacorp.Save is
            or else Left.Mission (I).Outcome /= Right.Mission (I).Outcome
            or else Left.Mission (I).Tick /= Right.Mission (I).Tick
          then
+            return False;
+         end if;
+      end loop;
+      for I in 1 .. Left.Roster_Count loop
+         if Left.Roster (I).Name_Len /= Right.Roster (I).Name_Len
+           or else Left.Roster (I).Name (1 .. Left.Roster (I).Name_Len)
+             /= Right.Roster (I).Name
+               (1 .. Right.Roster (I).Name_Len)
+           or else Left.Roster (I).Health /= Right.Roster (I).Health
+           or else Left.Roster (I).Accuracy
+             /= Right.Roster (I).Accuracy
+           or else Left.Roster (I).Speed /= Right.Roster (I).Speed
+           or else Left.Roster (I).Morale /= Right.Roster (I).Morale
+           or else Left.Roster (I).Augments
+             /= Right.Roster (I).Augments
+           or else Left.Roster (I).Gun /= Right.Roster (I).Gun
+           or else Left.Roster (I).Armour /= Right.Roster (I).Armour
+           or else Left.Roster (I).Alive /= Right.Roster (I).Alive
+         then
+            return False;
+         end if;
+      end loop;
+      for I in Left.Pick'Range loop
+         if Left.Pick (I) /= Right.Pick (I) then
+            return False;
+         end if;
+      end loop;
+      for Item in Research.Branch loop
+         if Left.Known (Item) /= Right.Known (Item) then
             return False;
          end if;
       end loop;

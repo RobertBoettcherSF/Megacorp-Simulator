@@ -4,7 +4,7 @@
 with Megacorp.Host;
 with Megacorp.Parameters;
 with Megacorp.Play;
-with Megacorp.World.Campaign;
+with Megacorp.Session;
 
 package body Megacorp.Save.Log is
    use type Parameters.Play_Mode;
@@ -256,6 +256,19 @@ package body Megacorp.Save.Log is
               & " " & Trim (Ev.E);
          when Kind_Ticks =>
             return "ticks " & Trim (Ev.Code);
+         when Kind_Hire =>
+            return "hire " & Trim (Ev.Slot);
+         when Kind_Fund =>
+            return "fund " & Trim (Ev.Code);
+         when Kind_Gear =>
+            return "gear " & Trim (Ev.Slot)
+              & " " & Trim (Ev.Code);
+         when Kind_Pick =>
+            return "pick " & Trim (Ev.Slot)
+              & " " & Trim (Ev.A);
+         when Kind_Payoff =>
+            return "payoff " & Outcome_Name (Ev.Outcome)
+              & " " & Trim (Ev.Region);
       end case;
    end Wording;
 
@@ -352,6 +365,31 @@ package body Megacorp.Save.Log is
          Ev.Code := Integer'Value (Field (Payload, 2));
          return Ev.Code > 0 and then Ev.Code <= 32
            and then Field (Payload, 3)'Length = 0;
+      elsif Kind = "hire" then
+         Ev.Kind := Kind_Hire;
+         Ev.Slot := Positive'Value (Field (Payload, 2));
+         return Field (Payload, 3)'Length = 0;
+      elsif Kind = "fund" then
+         Ev.Kind := Kind_Fund;
+         Ev.Code := Integer'Value (Field (Payload, 2));
+         return Ev.Code = 0 or else Ev.Code = 40 or else Ev.Code = 80;
+      elsif Kind = "gear" then
+         Ev.Kind := Kind_Gear;
+         Ev.Slot := Positive'Value (Field (Payload, 2));
+         Ev.Code := Integer'Value (Field (Payload, 3));
+         return Ev.Code in 1 .. 4
+           and then Field (Payload, 4)'Length = 0;
+      elsif Kind = "pick" then
+         Ev.Kind := Kind_Pick;
+         Ev.Slot := Positive'Value (Field (Payload, 2));
+         Ev.A := Integer'Value (Field (Payload, 3));
+         return Ev.Slot <= 4 and then Ev.A >= 0
+           and then Field (Payload, 4)'Length = 0;
+      elsif Kind = "payoff" then
+         Ev.Kind := Kind_Payoff;
+         Ev.Outcome := Outcome_Of (Field (Payload, 2));
+         Ev.Region := Positive'Value (Field (Payload, 3));
+         return Field (Payload, 4)'Length = 0;
       end if;
       return False;
    exception
@@ -427,6 +465,36 @@ package body Megacorp.Save.Log is
             if Ev.Code < 1 or else Ev.Code > 32 then
                raise Save_Error with "not a Megacorp delta";
             end if;
+         when Kind_Hire =>
+            if not Session.Can_Hire (Snap)
+              or else Ev.Slot /= Snap.Roster_Count + 1
+            then
+               raise Save_Error with "no hiring";
+            end if;
+         when Kind_Fund =>
+            if Ev.Code /= 0 and then Ev.Code /= 40
+              and then Ev.Code /= 80
+            then
+               raise Save_Error with "not a Megacorp delta";
+            end if;
+         when Kind_Gear =>
+            if Ev.Code < 1 or else Ev.Code > 4
+              or else not Session.Can_Fit
+                (Snap, Ev.Slot, Positive (Ev.Code))
+            then
+               raise Save_Error with "not a Megacorp delta";
+            end if;
+         when Kind_Pick =>
+            if Ev.A < 0
+              or else not Session.Can_Assign
+                (Snap, Ev.Slot, Natural (Ev.A))
+            then
+               raise Save_Error with "not a Megacorp delta";
+            end if;
+         when Kind_Payoff =>
+            if Ev.Region > Snap.Regions then
+               raise Save_Error with "not a Megacorp delta";
+            end if;
       end case;
    end Guard;
 
@@ -443,8 +511,7 @@ package body Megacorp.Save.Log is
                Item.Area (Ev.Region).Tax := Ev.Tax;
                Snap.Area (Ev.Region).Tax := Ev.Tax;
             end if;
-            World.Campaign.Advance (Item);
-            Take (Snap, Item, Snap.Day + 1);
+            Session.Play_Day (Snap, Item);
          when Kind_Region =>
             Item.Area (Ev.Region).Owner := Ev.Owner;
             Item.Area (Ev.Region).Tax := Ev.Tax;
@@ -494,6 +561,16 @@ package body Megacorp.Save.Log is
             Play.Handle (Ev.Code, Ev.A, Ev.B, Ev.C, Ev.D, Ev.E);
          when Kind_Ticks =>
             Play.Run (Positive (Ev.Code));
+         when Kind_Hire =>
+            Session.Hire (Snap);
+         when Kind_Fund =>
+            Session.Set_Grant (Snap, Natural (Ev.Code));
+         when Kind_Gear =>
+            Session.Fit (Snap, Ev.Slot, Positive (Ev.Code));
+         when Kind_Pick =>
+            Session.Assign (Snap, Ev.Slot, Natural (Ev.A));
+         when Kind_Payoff =>
+            Session.Debrief (Snap, Item, Ev.Region, Ev.Outcome);
       end case;
    end Apply;
 
@@ -701,6 +778,55 @@ package body Megacorp.Save.Log is
    begin
       return (Kind => Kind_Ticks, Code => Count, others => <>);
    end Ticks;
+
+   function Hire_Agent (Snap : Snapshot) return Event is
+   begin
+      return
+        (Kind => Kind_Hire,
+         Slot => Snap.Roster_Count + 1,
+         others => <>);
+   end Hire_Agent;
+
+   function Set_Grant (Amount : Natural) return Event is
+   begin
+      return
+        (Kind => Kind_Fund,
+         Code => Integer (Amount),
+         others => <>);
+   end Set_Grant;
+
+   function Fit_Gear (Agent : Positive; Item : Positive) return Event is
+   begin
+      return
+        (Kind => Kind_Gear,
+         Slot => Agent,
+         Code => Integer (Item),
+         others => <>);
+   end Fit_Gear;
+
+   function Pick_Squad
+     (Slot : Positive;
+      Agent : Natural) return Event
+   is
+   begin
+      return
+        (Kind => Kind_Pick,
+         Slot => Slot,
+         A => Integer (Agent),
+         others => <>);
+   end Pick_Squad;
+
+   function Payoff
+     (Region : Positive;
+      Outcome : Mission_Outcome) return Event
+   is
+   begin
+      return
+        (Kind => Kind_Payoff,
+         Region => Region,
+         Outcome => Outcome,
+         others => <>);
+   end Payoff;
 
    function Start
      (Disk : in out Data.Virtual_FS.Backend'Class;

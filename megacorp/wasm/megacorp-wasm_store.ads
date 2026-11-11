@@ -70,4 +70,16 @@ package Megacorp.Wasm_Store is
      with Export,
           Convention => C,
           External_Name => "megacorp_brief_size";
+
+   --  Item 25. Roster, research, and the player's funds.
+   --  JavaScript only reads this buffer.
+   function Office return System.Address
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_office";
+
+   function Office_Size return Interfaces.Unsigned_32
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_office_size";
 end Megacorp.Wasm_Store;

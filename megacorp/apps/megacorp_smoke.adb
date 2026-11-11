@@ -31,6 +31,8 @@ with Megacorp.Save.Migrate;
 with Megacorp.API;
 with Megacorp.Assets.Import;
 with Megacorp.Play;
+with Megacorp.Research;
+with Megacorp.Session;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -55,9 +57,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.24.0"
+     (Megacorp.Version = "0.25.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.24.0");
+      "version 0.25.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -918,7 +920,7 @@ begin
          while Mark <= Raw'Last and then Raw (Mark) /= ' ' loop
             Mark := Mark + 1;
          end loop;
-         Next (Mark + 1) := '3';
+         Next (Mark + 1) := '4';
          Native.Write (Root, "next.mgc", Next);
       end;
       Smoke_Check.Expect
@@ -1348,15 +1350,18 @@ begin
          end loop;
          Smoke_Check.Expect
            (Move.Listed_Version (Raw) = 1
-            and then Move.Listed_Version (Next) = 2
+            and then Move.Listed_Version (Next) = 3
             and then Move.Sum_Ok (Next)
             and then Move.To_Current (Next) = Next
             and then Ada.Strings.Fixed.Index (Next, "algorithm 1") > 0
+            and then Ada.Strings.Fixed.Index (Next, "funds 1500") > 0
             and then Snap.Algorithm = Globe.Current_Algorithm
             and then Snap.Day = 0
+            and then Snap.Funds = 1500
+            and then Snap.Roster_Count = 0
             and then Snap.Stamp (1 .. Snap.Stamp_Len) = "0.18.0"
             and then Study,
-            "a v1 fixture migrates to v2");
+            "a v1 fixture migrates to v3");
       end;
       declare
          Played : Megacorp.World.Atlas :=
@@ -1404,7 +1409,7 @@ begin
          while Mark <= Last and then Raw (Mark) /= ' ' loop
             Mark := Mark + 1;
          end loop;
-         Raw (Mark + 1) := '3';
+         Raw (Mark + 1) := '4';
          Native.Write (Disk, "future.mgc", Raw (1 .. Last));
          Smoke_Check.Expect
            (Rejected ("future.mgc", "wrong format version"),
@@ -1445,6 +1450,124 @@ begin
          Smoke_Check.Expect
            (Raised, "an unknown generator version is refused");
       end;
+   end;
+
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Globe renames Megacorp.World.Gen;
+      package Journal renames Megacorp.Save.Log;
+      package Books renames Megacorp.Session;
+      use type Megacorp.Weapons.Kind;
+
+      function Hex (Value : RNG.Word) return String;
+      function Hex (Value : RNG.Word) return String is
+         Glyphs : constant String := "0123456789abcdef";
+         Result : String (1 .. 16);
+         Rest : RNG.Word := Value;
+      begin
+         for I in reverse 1 .. 16 loop
+            Result (I) :=
+              Glyphs (Natural (Rest and 16#F#) + 1);
+            Rest := Rest / 16;
+         end loop;
+         return Result;
+      end Hex;
+
+      Root : Native.Disk := Native.Open ("/tmp/megacorp-economy");
+      World : Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Snap : Megacorp.Save.Snapshot :=
+        Megacorp.Save.Capture (World, 0, Params.Auto_Play);
+      Back : Megacorp.Save.Snapshot;
+      Book : Journal.Journal;
+      Who : Positive := 1;
+      Open : Boolean;
+      Raised_Hire : Boolean := False;
+      Seal : RNG.Word;
+   begin
+      Ada.Directories.Create_Path ("/tmp/megacorp-economy");
+      Snap.Grant := Books.Grant_Low;
+      for Day in 1 .. 2 loop
+         Books.Play_Day (Snap, World);
+      end loop;
+      Smoke_Check.Expect
+        (Snap.Company (1).Research = 80
+         and then Snap.Known (Megacorp.Research.SMG)
+         and then not Snap.Known (Megacorp.Research.Rifle)
+         and then not Snap.Known (Megacorp.Research.Vest),
+         "research unlocks the SMG at 80 points");
+      Books.Fit (Snap, 1, 1);
+      Megacorp.Save.Store (Root, "gear.mgc", Snap);
+      Back := Megacorp.Save.Load (Root, "gear.mgc");
+      Smoke_Check.Expect
+        (Back.Roster (1).Gun = Megacorp.Weapons.SMG
+         and then Back.Roster (1).Alive,
+         "equipment survives a reload");
+
+      World := Globe.Generate (42, Defaults);
+      Snap := Megacorp.Save.Capture (World, 0, Params.Auto_Play);
+      Snap.Grant := Books.Grant_Low;
+      Megacorp.Save.Store (Root, "books.mgc", Snap);
+      Book := Journal.Start (Root, "books.log", Snap);
+      for Day in 1 .. 30 loop
+         Journal.Commit
+           (Root, "books.log", Snap, World, Book, Journal.Day_None);
+      end loop;
+      Seal := Megacorp.Save.Digest (Books.Ledger (Snap));
+      Open := True;
+      for Item in Megacorp.Research.Branch loop
+         Open := Open and then Snap.Known (Item);
+      end loop;
+      Back := Megacorp.Save.Load (Root, "books.mgc");
+      World := Megacorp.Save.Rebuild (Back, Defaults);
+      Book := Journal.Load (Root, "books.log");
+      Journal.Replay (Back, World, Book);
+      Smoke_Check.Expect
+         (Hex (Seal) = "44d80c92b8a2199b"
+         and then Megacorp.Save.Digest (Books.Ledger (Back)) = Seal
+         and then Snap.Funds < 0
+         and then Books.In_Debt (Snap)
+         and then not Books.Can_Hire (Snap)
+         and then Open
+         and then Snap.Company (1).Research = 1200
+         and then Journal.Notice (Book) = "",
+         "economy balance over 30 days for seed 42");
+      begin
+         Journal.Commit
+           (Root, "books.log", Snap, World, Book,
+            Journal.Hire_Agent (Snap));
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            Raised_Hire :=
+              Ada.Exceptions.Exception_Message (Error) = "no hiring";
+      end;
+      Smoke_Check.Expect
+        (Raised_Hire, "debt refuses a hire");
+
+      World := Globe.Generate (42, Defaults);
+      Snap := Megacorp.Save.Capture (World, 0, Params.Auto_Play);
+      if Snap.Roster (2).Health < Snap.Roster (1).Health then
+         Who := 2;
+      end if;
+      Book := Journal.Start (Root, "dead.log", Snap);
+      Journal.Commit
+        (Root, "dead.log", Snap, World, Book,
+         Journal.Payoff (1, Megacorp.Save.Lost));
+      Megacorp.Save.Store (Root, "dead.mgc", Snap);
+      Back := Megacorp.Save.Load (Root, "dead.mgc");
+      Smoke_Check.Expect
+        (not Snap.Roster (Who).Alive
+         and then not Back.Roster (Who).Alive
+         and then Back.Roster (3 - Who).Alive,
+         "a dead agent stays dead after reload");
+      Back := Megacorp.Save.Capture (World, 0, Params.Auto_Play);
+      World := Globe.Generate (42, Defaults);
+      Book := Journal.Load (Root, "dead.log");
+      Journal.Replay (Back, World, Book);
+      Smoke_Check.Expect
+        (not Back.Roster (Who).Alive
+         and then Journal.Notice (Book) = "",
+         "a dead agent stays dead when the log is replayed");
    end;
 
    declare

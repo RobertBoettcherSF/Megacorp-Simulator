@@ -1,9 +1,11 @@
 --  SPDX-License-Identifier: MIT
 --  Copyright (c) 2026 Robert Boettcher
 
+with Megacorp.Agents;
 with Megacorp.Data.Virtual_FS;
 with Megacorp.Map;
 with Megacorp.Parameters;
+with Megacorp.Research;
 with Megacorp.RNG;
 with Megacorp.World;
 with Megacorp.World.Gen;
@@ -13,10 +15,12 @@ use type Megacorp.RNG.Word;
 --  play can change. Names, roads, and an untouched city are
 --  rebuilt from the stamped generator algorithm.
 --  Item 18 records the changes since this snapshot.
---  Item 19. Format version 2 adds research points. A v1 file
---  migrates forward. A newer file is refused.
+--  Item 19. Format version 2 adds research points.
+--  Item 25. Format version 3 adds the roster, research
+--  unlocks, and the player's funds. A v1 or v2 file migrates
+--  forward. A newer file is refused.
 package Megacorp.Save is
-   Format_Version : constant := 2;
+   Format_Version : constant := 3;
 
    Stamp_Max : constant := 24;
 
@@ -98,6 +102,12 @@ package Megacorp.Save is
       Agent    : Squad_Table;
       Missions  : Natural := 0;
       Mission   : Mission_Table;
+      Funds     : Integer := 1500;
+      Grant     : Natural := 0;
+      Roster_Count : Natural := 0;
+      Roster    : Agents.Roster_Table;
+      Pick      : Agents.Pick_Table := (others => 0);
+      Known     : Research.Known := (others => False);
       Algorithm : Positive := World.Gen.Current_Algorithm;
       Stamp_Len : Natural := 0;
       Stamp     : String (1 .. Stamp_Max) := (others => ' ');

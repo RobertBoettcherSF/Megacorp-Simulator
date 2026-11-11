@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.25.0, item 25
+
+The player has a roster of named agents, a five-node research tree, and a purse that is separate from campaign cash. A day adds the item 24 income of owned regions and subtracts agent upkeep and the research grant. The purse is an integer, so it can go negative; hiring and shopping then stop. Weapons, augments, and armour have prices and open when the corporation research total reaches them. A lost mission kills one squad agent, and that death stays in the save. Format version 3 stores the roster, the unlocks, and the purse. A v1 or v2 file migrates forward. The page shows Finances, Research, and Roster. Ada computes the figures. JavaScript only draws them.
+
 ### 2026-11-11 — version 0.24.0, item 24
 
 The world map is the strategic screen. Regions are drawn in the owner's colour. The player's regions are marked, and visited regions are drawn differently from unvisited ones. A hover or a tap opens a panel of owner, population, unrest, influence, income, the AI attack score, and the mission recipe. A corporations list shows region counts and strength. Pause, 1x, 2x, and 4x advance the campaign. Border fights and mission results from the delta log scroll in a ticker. On a narrow screen the panel is a bottom sheet. Ada computes every figure. JavaScript only draws.
@@ -384,6 +388,14 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **The narrow screen.** Below 720px the side panel is a bottom sheet. Tapping a region opens it. The handle collapses it. The map width follows the page, so the iPhone view is the same data on a smaller canvas.
 
+### Item 25 — agents, research, and the economy
+
+**The purse is not campaign cash.** Corporation cash on the atlas is what the item 16 AI spends, and it stays in the world digest. The player's funds are a separate integer on the snapshot. Each campaign day adds the item 24 income of regions owned by corporation 1, then subtracts 30 for every living agent and the research grant. A grant is 0, 40, or 80 points, added to the v2 research total. Funds may go negative. While they are negative, or short of the 400 hire price, hiring is refused and the panel says so.
+
+**The roster is generated.** A new game starts with two operatives. A hire appends the next person from the world seed and the roster index, so the name, health, accuracy, speed, and morale replay. Six is the limit. Two augment slots start empty. A weapon starts as a pistol. SMG, vest, reflex, rifle, and plate open from the research total, in that order, without spending the points. Buying one writes it onto the agent. The squad picker stores four roster indexes. A lost mission kills the living pick with the lowest health. A win pays 250 plus that region's income. The death, the gear, and the purse are in the snapshot.
+
+**Format 3.** The new lines are funds, grant, the roster, the four picks, and the five unlock flags. A v2 file gains an empty roster and 1500 funds. A v1 file still walks through version 2 first. The legacy seal used by old logs does not include these lines, so a v1 log still replays. Hire, grant, gear, pick, and payoff are delta-log records. A campaign day is the same day record as before; applying it now also closes the books.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -394,7 +406,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–24 (version 0.24.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–25 (version 0.25.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -786,7 +798,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 ### Phase F — Campaign layer and audio
 
 24. **World-map UI.** Done in 0.24.0. The map is coloured by owner, the player's regions are marked, and visited regions are drawn differently. A hover or tap opens Ada's figures for that region: owner, population, unrest, influence, income, AI pressure, and the recipe preview. Corporations list region counts and strength. Pause, 1x, 2x, and 4x advance the campaign. Border fights and mission results from the delta log are the ticker. A narrow window uses a bottom sheet. Depends on: 15, 16, 23. Try: open `web/index.html`, hover a region, and read the panel. Let the day run and see a border fight in the log. Size: medium.
-25. **Agents, equipment, research, economy.** Roster, mods, weapon shop, research tree, money. Depends on: 17, 24. Try: start research, skip campaign time (or play a mission), see it complete; agents keep mods after reload. Size: medium (`research*` + `agent*` + select menu are ~2,000+ lines in the reference tree).
+25. **Agents, equipment, research, economy.** Done in 0.25.0. The roster is named and generated. Hiring costs 400. A dead agent stays dead in the save. Weapons, augments, and armour have prices and unlock from the research total. Daily income, upkeep, and the research grant move an integer purse that can go into debt, which closes hiring. The squad picker feeds a mission's payoff. Format version 3 migrates from v2. The page has Finances, Research, and Roster panels. Depends on: 17, 24. Try: open `web/index.html`, hire an agent, set a research grant, and watch the funds change as the day moves. Size: medium.
 26. **Menus and briefing.** Title, new/load world, debrief stats. No intro FLI. Depends on: 24. Try: a complete session without command-line flags. Size: medium (`menus/` is 10,852 lines in C++, much of it layout we can simplify).
 27. **Sound and music.** WebAudio and own placeholder SFX, plus a music toggle. Depends on: 22. Try: shots and a music toggle. Size: small-medium.
 28. **Variety and polish.** More block grammars, IPA meters, scanner, remaining weapons, destruction that stays visible on later visits, performance pass. Depends on: 23–27. Try: a short campaign of several generated missions that still looks consistent after reload. Size: ongoing.

@@ -1,8 +1,8 @@
-# Megacorp Simulator 0.24.0
+# Megacorp Simulator 0.25.0
 
-Headless Ada core for Megacorp Simulator. Version 0.24.0 is the
-strategic world map (design item 24). Item 12, the C++ comparison,
-stays skipped, so there is no 0.12.0.
+Headless Ada core for Megacorp Simulator. Version 0.25.0 adds the
+agent roster, research tree, and player economy (design item 25).
+Item 12, the C++ comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -46,7 +46,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.24.0.zip` for
+It also writes `dist/megacorp_v0.25.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -81,7 +81,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.24.0 contains
+## What 0.25.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -156,6 +156,10 @@ strategic screen. Ada exports income, influence, AI pressure, the
 recipe preview, corporation strength, and the latest log headlines.
 The page only draws them. Pause, 1x, 2x, and 4x advance the
 campaign. A narrow window turns the side panel into a bottom sheet.
+The player's purse, roster, and research tree are separate from
+that campaign cash. A day pays the owned regions, then charges
+upkeep and the research grant. Funds can go negative. Format 3
+stores the books, and a v2 save migrates.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads
