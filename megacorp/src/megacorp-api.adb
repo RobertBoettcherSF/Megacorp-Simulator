@@ -140,6 +140,13 @@ package body Megacorp.API is
       end loop;
    end Publish;
 
+   procedure Install (Item : World.Atlas; Day : Natural) is
+   begin
+      Globe := Item;
+      Clock := Day;
+      Publish;
+   end Install;
+
    procedure Init (Seed : Interfaces.Unsigned_32) is
    begin
       Globe := World.Gen.Generate

@@ -27,33 +27,60 @@ cp -a "$tool/lib/rts-native/adalib/." "$work/rts/adalib/"
 cp -a "$tool/lib/rts-native/adainclude/." "$work/rts/adainclude/"
 cp "$root/wasm/runtime/"*.ads "$root/wasm/runtime/"*.adb \
    "$work/rts/adainclude/"
+# Leave system.ads unchanged so the prebuilt runtime alis stay valid.
+# No_Exception_Propagation stays. Save still compiles: a raise is a
+# call, and a handler is deleted by the compiler. The files we write
+# are well formed, so those paths are not taken.
 cd "$work"
 set -- -c -mtriple=wasm32-unknown-unknown -gnat2012 -gnata \
-   --RTS="$work/rts" -I "$root/src"
+   --RTS="$work/rts" -I "$root/src" -I "$root/wasm"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-chahan.adb"
 "$gcc" "$@" -gnatg "$root/wasm/runtime/a-textio.adb"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/s-exctab.adb"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-strunb.adb"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-contai.ads"
+"$gcc" "$@" -gnatg "$root/wasm/runtime/a-coinve.ads"
+"$gcc" "$@" "$root/wasm/runtime/megacorp-host.adb"
 "$gcc" "$@" "$root/src/megacorp.adb"
 "$gcc" "$@" "$root/src/megacorp-parameters.adb"
 "$gcc" "$@" "$root/src/megacorp-rng.adb"
 "$gcc" "$@" "$root/src/megacorp-world.adb"
 "$gcc" "$@" "$root/src/megacorp-world-gen.adb"
 "$gcc" "$@" "$root/src/megacorp-world-campaign.adb"
+"$gcc" "$@" "$root/src/megacorp-data.ads"
+"$gcc" "$@" "$root/src/megacorp-assets.ads"
+"$gcc" "$@" "$root/src/megacorp-data-virtual_fs.adb"
+"$gcc" "$@" "$root/src/megacorp-data-virtual_fs-browser.adb"
+"$gcc" "$@" "$root/src/megacorp-assets-import.adb"
+"$gcc" "$@" "$root/wasm/runtime/megacorp-map.adb"
+"$gcc" "$@" "$root/src/megacorp-save.adb"
+"$gcc" "$@" "$root/src/megacorp-save-migrate.adb"
+"$gcc" "$@" "$root/src/megacorp-save-log.adb"
 "$gcc" "$@" "$root/src/megacorp-api.adb"
-"$gcc" "$@" -I "$root/wasm" "$root/wasm/megacorp_wasm.adb"
+"$gcc" "$@" "$root/wasm/megacorp-wasm_store.adb"
+"$gcc" "$@" "$root/wasm/megacorp_wasm.adb"
 "$bind" -x megacorp_wasm.ali
 "$gcc" "$@" b~megacorp_wasm.adb
 clang --target=wasm32-unknown-unknown -c -O2 \
    -o gnat_stub.o "$root/wasm/gnat_stub.c"
-wasm-ld --no-entry --export-memory \
+wasm-ld --no-entry --export-memory --allow-undefined \
    --export=adainit --export=adafinal \
    --export=megacorp_init --export=megacorp_step \
+   --export=megacorp_boot --export=megacorp_advance \
+   --export=megacorp_reset \
+   --export=megacorp_import_buffer --export=megacorp_import_capacity \
+   --export=megacorp_commit_asset \
    --export=megacorp_state --export=megacorp_state_size \
    -z stack-size=1048576 \
    megacorp_wasm.o b~megacorp_wasm.o \
-   megacorp.o megacorp-parameters.o megacorp-rng.o \
+   megacorp.o megacorp-host.o megacorp-parameters.o megacorp-rng.o \
    megacorp-world.o megacorp-world-gen.o megacorp-world-campaign.o \
-   megacorp-api.o \
-   a-chahan.o a-textio.o gnat_stub.o \
+   megacorp-map.o \
+   megacorp-data-virtual_fs.o megacorp-data-virtual_fs-browser.o \
+   megacorp-assets-import.o \
+   megacorp-save.o megacorp-save-migrate.o megacorp-save-log.o \
+   megacorp-api.o megacorp-wasm_store.o \
+   a-chahan.o a-textio.o a-strunb.o s-exctab.o gnat_stub.o \
    "$tool/lib/rts-native/adalib/libgnat.a" \
    -o "$repo/web/megacorp.wasm"
 echo "wrote $repo/web/megacorp.wasm"

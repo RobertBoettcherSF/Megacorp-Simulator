@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.20.0</title>
+  <title>Megacorp Simulator 0.21.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -77,7 +77,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.20.0</span>
+    <p class="meta">version <span id="version">0.21.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -95,8 +95,13 @@
     <span id="queue">No action queue on this trace.</span>
     <button id="view" type="button">Flat view</button>
     <button id="world" type="button">World map</button>
+    <button id="new-world" type="button">New world</button>
+    <label>Import
+      <input id="import-asset" type="file" accept=".json,.png,application/json,image/png">
+    </label>
+    <span id="store"></span>
     <label>Day
-      <input id="day" type="range" min="0" max="365" value="0">
+      <input id="day" type="range" min="0" max="365" value="0" autocomplete="off">
       <span id="day-label">0</span>
     </label>
     <span>
@@ -122,7 +127,10 @@
     prepared start or goal. The
     layout is a generated city. The world map is drawn from the Ada
     module in the browser when it loads, and the day counter moves.
+    Reload continues that day. New world starts again. Import stores
+    a tileset or sprite only after the Ada module accepts it.
     A click on a region opens that city's precomputed trace.</p>
+  <script src="js/store.js"></script>
   <script src="js/map.js"></script>
 </body>
 </html>

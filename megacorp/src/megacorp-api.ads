@@ -39,4 +39,8 @@ package Megacorp.API is
    function Fingerprint
      (Item : World.Atlas;
       Day : Natural) return RNG.Word;
+
+   --  Show an atlas the store loaded. The pure Init/Step path
+   --  does not use this.
+   procedure Install (Item : World.Atlas; Day : Natural);
 end Megacorp.API;

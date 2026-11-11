@@ -29,6 +29,7 @@ with Megacorp.Save;
 with Megacorp.Save.Log;
 with Megacorp.Save.Migrate;
 with Megacorp.API;
+with Megacorp.Assets.Import;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -53,9 +54,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.20.0"
+     (Megacorp.Version = "0.21.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.20.0");
+      "version 0.21.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -73,6 +74,25 @@ begin
         (Megacorp.API.Digest
            = Megacorp.API.Fingerprint (Opened, 10),
          "engine matches native day 10");
+   end;
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      Store : constant Native.Disk := Native.Open ("../web");
+      Text : constant String :=
+        Native.Read (Store, "assets/tiles.json");
+      Png : constant String :=
+        Character'Val (16#89#) & "PNG"
+        & Character'Val (13) & Character'Val (10)
+        & Character'Val (16#1A#) & Character'Val (10);
+   begin
+      Smoke_Check.Expect
+        (Megacorp.Assets.Import.Accepts ("tiles.json", Text)
+         and then not Megacorp.Assets.Import.Accepts
+           ("notes.json", "hello")
+         and then Megacorp.Assets.Import.Accepts ("sprite.png", Png)
+         and then not Megacorp.Assets.Import.Accepts
+           ("sprite.png", "PNG"),
+         "imported assets are checked");
    end;
    Smoke_Check.Expect
      (Params.Corporation_Count (Defaults) = 4
