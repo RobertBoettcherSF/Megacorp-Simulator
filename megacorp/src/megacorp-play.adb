@@ -8,6 +8,7 @@ with Megacorp.Map.Gen;
 with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.Path;
+with Megacorp.Sound;
 with Megacorp.Peds;
 with Megacorp.Vehicles;
 with Megacorp.Weapons;
@@ -16,6 +17,7 @@ package body Megacorp.Play is
    use type Interfaces.Unsigned_32;
    use type Interfaces.Unsigned_64;
    use type Behaviour.Role;
+   use type Behaviour.Mood;
    use type Map.Point;
    use type Mission.Gen.Recipe_Kind;
    use type Path.Status;
@@ -82,6 +84,12 @@ package body Megacorp.Play is
    Focus_Region : Natural := 0;
    Zone : Map.Point := (X => 1, Y => 1);
    Cast_N : Natural := 0;
+   Max_Cast : constant := 8;
+   Was_X : array (1 .. Max_Cast) of Natural := (others => 0);
+   Was_Y : array (1 .. Max_Cast) of Natural := (others => 0);
+   Was_Alive : array (1 .. Max_Cast) of Boolean := (others => False);
+   Was_Hot : array (1 .. Max_Cast) of Boolean := (others => False);
+   Heard : Sound.Stream;
    Team : Crowd_Ref;
    Lead : Map.Point := (X => 1, Y => 1);
    Banner : String (1 .. 48) := (others => ' ');
@@ -110,6 +118,8 @@ package body Megacorp.Play is
    procedure Wander;
    procedure Step_Once;
    procedure Mission_Step;
+   procedure Remember (Index : Positive; Seen : Behaviour.Frame);
+   procedure Hear;
    function Observe (Index : Positive) return Behaviour.Frame;
    function Agents_Alive return Natural;
    function Agent_On_Zone return Boolean;
@@ -488,7 +498,58 @@ package body Megacorp.Play is
       return False;
    end Agent_On_Zone;
 
+   procedure Remember (Index : Positive; Seen : Behaviour.Frame) is
+   begin
+      if Index > Max_Cast then
+         return;
+      end if;
+      Was_X (Index) := Seen.X;
+      Was_Y (Index) := Seen.Y;
+      Was_Alive (Index) := Seen.Alive;
+      Was_Hot (Index) :=
+        Seen.Temper = Behaviour.Warn
+        or else Seen.Temper = Behaviour.Engage;
+   end Remember;
+
+   procedure Hear is
+      Seen : Behaviour.Frame;
+      Moved : Boolean := False;
+      Hot : Boolean;
+   begin
+      for I in 1 .. Cast_N loop
+         Seen := Observe (I);
+         if Seen.Fired then
+            Sound.Push (Heard, Sound.Gun);
+         end if;
+         if Seen.Landed then
+            Sound.Push (Heard, Sound.Hit);
+         end if;
+         if Was_Alive (I) and then not Seen.Alive then
+            Sound.Push (Heard, Sound.Death);
+         end if;
+         Hot := Seen.Temper = Behaviour.Warn
+           or else Seen.Temper = Behaviour.Engage;
+         if Seen.Job = Behaviour.Police
+           and then not Was_Hot (I)
+           and then Hot
+         then
+            Sound.Push (Heard, Sound.Alarm);
+         end if;
+         if Seen.Alive
+           and then Was_X (I) > 0
+           and then (Seen.X /= Was_X (I) or else Seen.Y /= Was_Y (I))
+         then
+            Moved := True;
+         end if;
+         Remember (I, Seen);
+      end loop;
+      if Moved and then Ticks mod 8 = 0 then
+         Sound.Push (Heard, Sound.Foot);
+      end if;
+   end Hear;
+
    procedure Mission_Step is
+      Before : constant Ending_Kind := Ending;
    begin
       if Ending /= None then
          return;
@@ -496,12 +557,20 @@ package body Megacorp.Play is
       Behaviour.Step
         (Team.all, Ground.all, Stuff, Motors, Ticks + 1);
       Ticks := Ticks + 1;
+      Hear;
       if Agents_Alive = 0 then
          Ending := Defeat;
       elsif Agent_On_Zone then
          Ending := Victory;
       elsif Ticks >= Mission_Cap then
          Ending := Expired;
+      end if;
+      if Ending /= Before then
+         if Ending = Victory then
+            Sound.Push (Heard, Sound.Win);
+         else
+            Sound.Push (Heard, Sound.Loss);
+         end if;
       end if;
    end Mission_Step;
 
@@ -950,11 +1019,27 @@ package body Megacorp.Play is
       if Ground = null then
          return;
       end if;
+      Sound.Clear (Heard);
       for Drop in 1 .. Count loop
          Step_Once;
       end loop;
       Publish;
    end Run;
+
+   function Sound_Count return Natural is
+   begin
+      return Heard.Count;
+   end Sound_Count;
+
+   function Sound_Code (Index : Positive) return Natural is
+   begin
+      return Sound.Kind'Pos (Heard.Item (Index).Which);
+   end Sound_Code;
+
+   procedure Clear_Sounds is
+   begin
+      Sound.Clear (Heard);
+   end Clear_Sounds;
 
    function Clock return Natural is
    begin

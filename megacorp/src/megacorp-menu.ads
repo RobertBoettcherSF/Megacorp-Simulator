@@ -14,7 +14,8 @@ package Megacorp.Menu is
       Open_Brief, Start_Field, Cancel_Brief, Ack_Debrief,
       Pause_Now, Resume_Now, Save_Now, Quit_Title,
       Set_Speed, Set_Volume, Roll_Seed, Type_Digit, Clear_Seed,
-      Reroll_Region, Open_New, Open_Settings, Open_Credits);
+      Reroll_Region, Open_New, Open_Settings, Open_Credits,
+      Set_Effects, Set_Music);
 
    type Effect is
      (Stay, Make_Scenario, Make_Free, Load_Continue,
@@ -27,6 +28,8 @@ package Megacorp.Menu is
       Saved    : Boolean := False;
       Speed    : Natural := 1;
       Volume   : Natural := 70;
+      Effects  : Natural := 80;
+      Music    : Natural := 40;
       Region   : Natural := 0;
       Scenario : Natural := 1;
       Typed    : Natural := 42;
