@@ -1,9 +1,9 @@
-# Megacorp Simulator 0.20.0
+# Megacorp Simulator 0.21.0
 
-Headless Ada core for Megacorp Simulator. Version 0.20.0 runs the
-world in the browser from a WebAssembly build of this core (design
-item 20). Item 12, the C++ comparison, stays skipped, so there is
-no 0.12.0.
+Headless Ada core for Megacorp Simulator. Version 0.21.0 runs the
+world in the browser from a WebAssembly build of this core and keeps
+that world in origin storage (design item 21). Item 12, the C++
+comparison, stays skipped, so there is no 0.12.0.
 Version 0.6.1 keeps the browser
 page working when
 WebKit refuses to read the atlas pixels. Later packages are still
@@ -47,7 +47,7 @@ tileset with the Ada tool `tools/gen_tileset`, runs `bin/megacorp`
 and `bin/megacorp_smoke`, and rewrites `../web/data/` from the Ada
 map export, including precomputed walk and drive paths, ped traces,
 the vehicle demo, the behaviour demo, and the mission demo.
-It also writes `dist/megacorp_v0.20.0.zip` for
+It also writes `dist/megacorp_v0.21.0.zip` for
 local use; that archive is not a deliverable.
 
 The same steps by hand:
@@ -82,7 +82,7 @@ Build products (`obj/`, `lib/`, `bin/`) are not committed. The
 exported JSON under `web/data/` is committed so the page can be opened
 without a local build.
 
-## What 0.20.0 contains
+## What 0.21.0 contains
 
 Real code: version, generator parameters (defaults 4 corporations,
 40 regions, 128 by 128 city maps), the play-mode re-roll rule, a
@@ -135,7 +135,13 @@ research total per corporation, default 0. The generator algorithm
 is stamped, and an old world is rebuilt with that stamp.
 `wasm/build.sh` compiles that same world to `web/megacorp.wasm`.
 The page loads it and draws the live map. `node wasm/check.mjs`
-compares the module with `bin/megacorp --engine-check`.
+compares the module with `bin/megacorp --engine-check`. The module
+also writes `slot.mgc` and `slot.log` through the browser file
+backend. The page keeps those files in the Origin Private File
+System, or in IndexedDB when that is unavailable, and mirrors them
+in localStorage so a reload continues the same day. New world
+replaces them. A chosen tileset or sprite is stored only when
+`Megacorp.Assets.Import` accepts it.
 
 `Megacorp.Data.Virtual_FS` reads logical paths. The disk backend is
 `Virtual_FS.Native`. `Megacorp.Assets.Placeholder` loads

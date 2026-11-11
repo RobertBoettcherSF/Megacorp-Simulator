@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-10 — version 0.21.0, item 21
+
+The browser file backend is `Virtual_FS.Browser`. The wasm module writes the version-2 snapshot `slot.mgc` and the delta log `slot.log` through it, and reads them back on `megacorp_boot`. A reload continues that day. New world calls `megacorp_reset` and replaces both files. The page stores the bytes in the Origin Private File System. If that directory cannot be opened, it uses IndexedDB. The two save files are also mirrored in localStorage, because a synchronous OPFS access handle is only available on a worker and the module runs on the main thread. A chosen tileset or sprite is copied into the module and stored at `assets/<name>` only when `Megacorp.Assets.Import` accepts it: a PNG signature, or JSON that names `tile_width` and `tiles`.
+
 ### 2026-11-10 — version 0.20.0, item 20
 
 The browser runs the Ada world, not only a precomputed export. `web/megacorp.wasm` is built by AdaWebPack 22.1.0's llvm-gnat for `wasm32-unknown-unknown` and linked with `wasm-ld`. JavaScript loads that file, calls `adainit`, `megacorp_init(42)`, and `megacorp_step`, and reads a shared buffer for the map. The header shows `engine: wasm` and the version. The day counter advances on its own. Seed 42 at day 0 and day 10 matches `bin/megacorp --engine-check` and the smoke test. If the module fails to load, the precomputed traces stay. `megacorp/wasm/build.sh` rebuilds the file and downloads the compiler if it is missing.
@@ -133,6 +137,14 @@ Sources: [xoshiro256starstar.c](https://prng.di.unimi.it/xoshiro256starstar.c), 
 ## Autonomous decisions (night of 2026-11-10)
 
 Robert authorised items 8 through 28 to be built overnight, one branch and one minor version each, and asked for this log so the choices can be reviewed in the morning. Standing calls for the whole night: skip item 12 (the C++ comparison harness) and record that skip when its turn comes; if GNAT-LLVM or AdaWebPack cannot be built for item 20, use an Ada WebSocket server and record that; item 27 uses generated placeholder sounds.
+
+### Runtime licence — libgnat is not a GPL project
+
+`web/megacorp.wasm` is linked with `libgnat.a` from AdaWebPack 22.1.0. That archive is the GNAT runtime: **GPL-3.0 with the GCC Runtime Library Exception 3.1**. The same note is in the root `NOTICE` file.
+
+This does not make Megacorp Simulator a GPL program. The exception is an extra permission on top of GPL-3.0. It applies when the runtime is combined with independent modules by an eligible compilation process. GNAT is that process. The exception then says the combined target code may be conveyed under terms of our choice. Those terms are MIT, which is the licence of every source file we wrote. We do not commit the runtime sources or the compiler. Rebuilding the module downloads them. The MIT sources do not have to be relicensed, and a person who receives the wasm file is not required to apply the GPL to the rest of the repository.
+
+What would have made the project GPL is linking a runtime that had no runtime exception, or copying GPL source into the tree. Neither of those happened.
 
 ### Item 8 — licence, weapons, and shots
 
@@ -324,6 +336,14 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **Not the WebSocket fallback.** The module runs. A local socket server was not added.
 
+### Item 21 — browser storage and asset import
+
+**Synchronous host, asynchronous origin storage.** The Ada backend is five imports: exists, length, read, write, append. OPFS can create a file and a writable stream on the main thread, but `createSyncAccessHandle` exists only inside a worker. The module cannot call it. The page therefore keeps the files in a map the imports see, fills that map before `megacorp_boot`, and writes `slot.mgc` and `slot.log` to `localStorage` before the import returns. The same bytes are queued to OPFS. If `navigator.storage.getDirectory` throws, the queue goes to IndexedDB. `?store=idb` forces that queue so the fallback can be checked. On the next load a snapshot already in localStorage is kept unless OPFS has one with a higher day. The log stays with the localStorage copy when that copy exists, because the snapshot day stays 0 until the log is compacted and a day number cannot say which log is newer.
+
+**The same files as items 17–19.** Boot loads `slot.mgc`, rebuilds the atlas, and replays `slot.log`. A missing snapshot generates seed 42, captures auto-play, and writes both files. Advance commits `day none`, which is the campaign step, and compacts after 32 records. Reset overwrites both files with a new day-0 world. The page button is New world. The live timer calls advance, so a reload is not day 0. There is no new save format.
+
+**What an import may be.** The page copies the chosen file into a 64 KB buffer and passes the name to `megacorp_commit_asset`. Ada accepts `.png` only when the first eight bytes are the PNG signature, and `.json` only when the text contains both `tile_width` and `tiles`. The stored name is `assets/` plus the basename, and that path has to be a logical path. Anything else returns 0. The page says Import refused and does not store the file. JavaScript does not decide the format.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -334,7 +354,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–20 (version 0.20.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1, as logged under item 20.  
+**Status:** agreed design, updated 10 November 2026. Items 1–11 and 13–21 (version 0.21.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -719,7 +739,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 ### Phase E — Browser front end, first playable mission
 
 20. **WASM toolchain spike.** Done in 0.20.0. AdaWebPack 22.1.0 llvm-gnat emits the world core as `web/megacorp.wasm`. The page calls `megacorp_init` and `megacorp_step` and draws the live map. Seed 42 matches the native engine check. Depends on: 1, 15, 16. Try: open `web/index.html`; the header says `engine: wasm` and the day counter moves. `node megacorp/wasm/check.mjs` compares the module with `bin/megacorp --engine-check`. Size: spike.
-21. **Browser storage.** OPFS (IndexedDB fallback) for saves and the placeholder pack. No original-data file picker. Depends on: 4, 17, 20. Try: create a world, reload the page, the world is still there. Size: medium (JS + Host bindings).
+21. **Browser storage.** Done in 0.21.0. The wasm module reads and writes `slot.mgc` and `slot.log` through `Virtual_FS.Browser`. The page uses OPFS, IndexedDB when OPFS cannot be opened, and a localStorage mirror of the two save files. Reload continues the saved day. New world resets it. A chosen tileset or sprite is stored only after `Megacorp.Assets.Import` accepts it. Depends on: 4, 17, 20. Try: open `web/index.html`, let the day move, reload, and see the same day; New world starts again. Size: medium (JS + Host bindings).
 22. **Input and tick in the page.** Pointer/keyboard → API; fixed-step ticks; framebuffer (or display list) each frame. Depends on: 20, 11. Try: walk a ped around a generated block with the keyboard. Size: medium.
 23. **Playable first mission.** A generated block, at least one complete-able objective, shooting and movement, success/fail screen, then a save. Depends on: 14, 22, 17. Try: generate seed 42, finish the mission in the browser, reload, see the outcome and any destruction persist. Size: integration; this is the first “it feels like a game” milestone. Rough logic already built in B–D; UI glue is the added work.
 

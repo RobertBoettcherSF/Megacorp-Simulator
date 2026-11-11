@@ -1143,9 +1143,9 @@ async function main() {
       slider.addEventListener("input", () => {
         if (wasmLive && wasmExports) {
           const target = Number(slider.value);
-          wasmExports.megacorp_init(42);
+          wasmExports.megacorp_reset(42);
           if (target > 0) {
-            wasmExports.megacorp_step(target);
+            wasmExports.megacorp_advance(target);
           }
           showWasmDay();
           if (showWorld) {
@@ -1176,17 +1176,60 @@ async function main() {
     if (!response.ok) {
       throw new Error(String(response.status));
     }
+    const storeMode = await MegacorpStore.open();
+    document.getElementById("store").textContent = storeMode;
     const bytes = await response.arrayBuffer();
-    const mod = await WebAssembly.instantiate(bytes, {});
+    const mod = await WebAssembly.instantiate(bytes, MegacorpStore.imports());
     wasmExports = mod.instance.exports;
+    MegacorpStore.bind(wasmExports.memory);
     wasmExports.adainit();
-    wasmExports.megacorp_init(42);
+    try {
+      wasmExports.megacorp_boot(42);
+    } catch (err) {
+      wasmExports.megacorp_reset(42);
+    }
     wasmLive = true;
     showWorld = true;
     document.getElementById("world").textContent = "City";
     document.getElementById("hover").textContent = "Hover a region.";
     showWasmDay();
     draw();
+    document.getElementById("new-world").addEventListener("click", () => {
+      wasmExports.megacorp_reset(42);
+      showWasmDay();
+      if (showWorld) {
+        draw();
+      }
+    });
+    document.getElementById("import-asset").addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) {
+        return;
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const cap = wasmExports.megacorp_import_capacity();
+      if (bytes.length === 0 || bytes.length > cap) {
+        document.getElementById("hover").textContent = "Import refused.";
+        return;
+      }
+      const dest = wasmExports.megacorp_import_buffer();
+      const mem = new Uint8Array(wasmExports.memory.buffer);
+      mem.set(bytes, dest);
+      const nameBytes = new TextEncoder().encode(file.name);
+      const namePtr = dest + bytes.length;
+      if (namePtr + nameBytes.length > mem.length) {
+        document.getElementById("hover").textContent = "Import refused.";
+        return;
+      }
+      mem.set(nameBytes, namePtr);
+      const accepted = wasmExports.megacorp_commit_asset(
+        namePtr, nameBytes.length, bytes.length);
+      if (accepted !== 1) {
+        document.getElementById("hover").textContent = "Import refused.";
+        return;
+      }
+      document.getElementById("hover").textContent = `Imported ${file.name}.`;
+    });
     wasmTimer = setInterval(() => {
       if (!wasmExports) {
         return;
@@ -1194,9 +1237,9 @@ async function main() {
       const view = new DataView(wasmExports.memory.buffer);
       const day = view.getUint32(wasmExports.megacorp_state(), true);
       if (day >= 120) {
-        wasmExports.megacorp_init(42);
+        wasmExports.megacorp_reset(42);
       } else {
-        wasmExports.megacorp_step(1);
+        wasmExports.megacorp_advance(1);
       }
       showWasmDay();
       if (showWorld) {

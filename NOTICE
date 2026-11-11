@@ -1,0 +1,26 @@
+Megacorp Simulator
+Copyright (c) 2026 Robert Boettcher
+SPDX-License-Identifier: MIT
+
+The source in this repository is MIT, apart from the note below.
+
+Third-party runtime linked into web/megacorp.wasm
+-------------------------------------------------
+AdaWebPack 22.1.0 (https://github.com/godunko/adawebpack)
+provides the GNAT runtime archive libgnat.a that the WebAssembly
+module is linked with. That runtime is:
+
+  GPL-3.0 WITH GCC-exception-3.1
+  (GNU General Public License v3.0 with the GCC Runtime Library
+  Exception, version 3.1)
+
+The compiler is GNAT (an Eligible Compilation Process under that
+exception). The exception gives permission to convey the combined
+module under the terms of the rest of this project, which are MIT.
+It does not make Megacorp Simulator a GPL program, and it does not
+require the MIT sources to be relicensed.
+
+The AdaWebPack compiler and the runtime sources are not committed.
+megacorp/wasm/build.sh downloads the compiler when the module is
+rebuilt. The stubs written for this project (Text_IO, To_Upper,
+and the two C helpers) are MIT.

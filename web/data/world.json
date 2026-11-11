@@ -1,5 +1,5 @@
 {
-  "version": "0.20.0",
+  "version": "0.21.0",
   "seed":  42,
   "corporations": [
     {"id":  1, "name": "Tolqen Combine", "colour": "#a050c8", "home":  37, "cash":  4944, "trait": "AGGRESSIVE"},

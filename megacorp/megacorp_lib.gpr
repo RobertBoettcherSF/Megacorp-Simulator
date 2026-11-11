@@ -20,6 +20,7 @@ project Megacorp_Lib is
       "Megacorp.Data",
       "Megacorp.Data.Virtual_FS",
       "Megacorp.Data.Virtual_FS.Native",
+      "Megacorp.Assets.Import",
       "Megacorp.World",
       "Megacorp.World.Gen",
       "Megacorp.World.Campaign",

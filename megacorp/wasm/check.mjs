@@ -13,7 +13,15 @@ if (lines.length !== 2) {
 }
 const expected = lines.map((line) => line.trim().split(" ").pop());
 const bytes = readFileSync(`${root}web/megacorp.wasm`);
-const mod = await WebAssembly.instantiate(bytes, {});
+const mod = await WebAssembly.instantiate(bytes, {
+  env: {
+    host_exists: () => 0,
+    host_length: () => -1,
+    host_read: () => {},
+    host_write: () => {},
+    host_append: () => {}
+  }
+});
 const api = mod.instance.exports;
 api.adainit();
 api.megacorp_init(42);
