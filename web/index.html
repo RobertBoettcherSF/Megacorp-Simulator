@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.24.0</title>
+  <title>Megacorp Simulator 0.25.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -118,7 +118,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.24.0</span>
+    <p class="meta">version <span id="version">0.25.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -173,6 +173,18 @@
     <section id="corp-panel"></section>
     <h2>Log</h2>
     <section id="news">No border fights yet.</section>
+    <h2>Finances</h2>
+    <section id="finance-panel">Waiting for the books.</section>
+    <p>
+      <button id="fund-0" type="button">Grant 0</button>
+      <button id="fund-40" type="button">Grant 40</button>
+      <button id="fund-80" type="button">Grant 80</button>
+    </p>
+    <h2>Research</h2>
+    <section id="research-panel"></section>
+    <h2>Roster</h2>
+    <section id="roster-panel"></section>
+    <p><button id="hire" type="button">Hire</button></p>
   </aside>
   </div>
   <p class="note">Paths, ped motion, action queues, shots, and vehicles are
@@ -197,8 +209,8 @@
     it. Tap an enemy to attack. Win or lose returns that result to
     the world map.
     A click on a region opens that city's precomputed trace.</p>
-  <script src="js/store.js?v=024"></script>
-  <script src="js/play.js?v=024"></script>
-  <script src="js/map.js?v=024"></script>
+  <script src="js/store.js?v=025"></script>
+  <script src="js/play.js?v=025"></script>
+  <script src="js/map.js?v=025"></script>
 </body>
 </html>

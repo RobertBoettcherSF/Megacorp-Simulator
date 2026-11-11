@@ -17,6 +17,7 @@ package body Megacorp.Save.Migrate is
    function Trim (Value : Integer) return String;
    function Payload_Of (Text : String) return String;
    function Upgrade (Payload : String) return String;
+   function Books (Payload : String) return String;
    function Wrap (Version : Positive; Payload : String) return String;
 
    function Hex (Value : RNG.Word) return String is
@@ -151,6 +152,16 @@ package body Megacorp.Save.Migrate is
       return Ada.Strings.Unbounded.To_String (Text);
    end Upgrade;
 
+   function Books (Payload : String) return String is
+   begin
+      return Payload
+        & "funds 1500" & LF
+        & "grant 0" & LF
+        & "roster 0" & LF
+        & "picks 0 0 0 0" & LF
+        & "unlock 0 0 0 0 0" & LF;
+   end Books;
+
    function Wrap (Version : Positive; Payload : String) return String is
    begin
       return "MGC1 " & Trim (Version) & LF
@@ -168,6 +179,8 @@ package body Megacorp.Save.Migrate is
    begin
       if Listed_Version (Text) = 1 then
          return Wrap (2, Upgrade (Payload_Of (Text)));
+      elsif Listed_Version (Text) = 2 then
+         return Wrap (3, Books (Payload_Of (Text)));
       end if;
       raise Save_Error with "wrong format version";
    end Step;

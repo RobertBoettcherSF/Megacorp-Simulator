@@ -80,6 +80,26 @@ package Megacorp.Save.Log is
    function Ticks (Count : Positive) return Event
      with Pre => Count <= 32;
 
+   --  Item 25. Roster, research funding, equipment, the squad
+   --  picker, and a mission's effect on the books.
+   function Hire_Agent (Snap : Snapshot) return Event
+     with Pre => Snap.Roster_Count < 6;
+
+   function Set_Grant (Amount : Natural) return Event
+     with Pre => Amount = 0 or else Amount = 40 or else Amount = 80;
+
+   function Fit_Gear (Agent : Positive; Item : Positive) return Event
+     with Pre => Item <= 4;
+
+   function Pick_Squad
+     (Slot : Positive;
+      Agent : Natural) return Event
+     with Pre => Slot <= 4;
+
+   function Payoff
+     (Region : Positive;
+      Outcome : Mission_Outcome) return Event;
+
    function Start
      (Disk : in out Data.Virtual_FS.Backend'Class;
       Path : String;
@@ -145,7 +165,12 @@ private
       Kind_Squad,
       Kind_Reroll,
       Kind_Order,
-      Kind_Ticks);
+      Kind_Ticks,
+      Kind_Hire,
+      Kind_Fund,
+      Kind_Gear,
+      Kind_Pick,
+      Kind_Payoff);
 
    type Event is record
       Kind    : Event_Kind := Kind_Day;

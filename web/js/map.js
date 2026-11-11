@@ -796,6 +796,164 @@ function showStrategic(regionId) {
   document.getElementById("sheet").classList.add("open");
 }
 
+function readFixed(view, offset, width) {
+  const length = view.getUint8(offset);
+  const used = length < width ? length : width;
+  return readAscii(view, offset + 1, used);
+}
+
+function readOffice() {
+  if (!wasmExports || !wasmExports.megacorp_office) {
+    return null;
+  }
+  const view = new DataView(wasmExports.memory.buffer);
+  let cursor = wasmExports.megacorp_office();
+  cursor += 1;
+  const funds = view.getInt32(cursor, true);
+  cursor += 4;
+  const research = view.getUint16(cursor, true);
+  cursor += 2;
+  const grant = view.getUint16(cursor, true);
+  cursor += 2;
+  const debt = view.getUint8(cursor) === 1;
+  cursor += 1;
+  const count = view.getUint8(cursor);
+  cursor += 1;
+  const canHire = view.getUint8(cursor) === 1;
+  cursor += 1;
+  const hirePrice = view.getUint16(cursor, true);
+  cursor += 2;
+  const upkeep = view.getUint16(cursor, true);
+  cursor += 2;
+  const income = view.getUint16(cursor, true);
+  cursor += 2;
+  const nodes = [];
+  for (let i = 0; i < 5; i += 1) {
+    const open = view.getUint8(cursor) === 1;
+    cursor += 1;
+    const cost = view.getUint16(cursor, true);
+    cursor += 2;
+    const name = readFixed(view, cursor, 8);
+    cursor += 9;
+    nodes.push({ open, cost, name });
+  }
+  const roster = [];
+  for (let i = 0; i < count; i += 1) {
+    const alive = view.getUint8(cursor) === 1;
+    cursor += 1;
+    const health = view.getUint8(cursor);
+    cursor += 1;
+    const accuracy = view.getUint8(cursor);
+    cursor += 1;
+    const speed = view.getUint8(cursor);
+    cursor += 1;
+    const morale = view.getUint8(cursor);
+    cursor += 1;
+    const augments = view.getUint8(cursor);
+    cursor += 1;
+    cursor += 1;
+    const armour = view.getUint8(cursor);
+    cursor += 1;
+    const name = readFixed(view, cursor, 12);
+    cursor += 13;
+    const weapon = readFixed(view, cursor, 6);
+    cursor += 7;
+    roster.push({
+      alive, health, accuracy, speed, morale, augments, armour, name, weapon
+    });
+  }
+  const picks = [];
+  for (let i = 0; i < 4; i += 1) {
+    picks.push(view.getUint8(cursor));
+    cursor += 1;
+  }
+  const hiring = view.getUint8(cursor) === 1;
+  cursor += 1;
+  const candidate = readFixed(view, cursor, 12);
+  cursor += 13;
+  const candidateStats = {
+    health: view.getUint8(cursor),
+    accuracy: view.getUint8(cursor + 1),
+    speed: view.getUint8(cursor + 2),
+    morale: view.getUint8(cursor + 3)
+  };
+  return {
+    funds, research, grant, debt, count, canHire, hirePrice,
+    upkeep, income, nodes, roster, picks, hiring, candidate, candidateStats
+  };
+}
+
+function paintOffice() {
+  const office = readOffice();
+  const finance = document.getElementById("finance-panel");
+  const study = document.getElementById("research-panel");
+  const roster = document.getElementById("roster-panel");
+  if (!office || !finance || !study || !roster) {
+    return;
+  }
+  finance.dataset.funds = String(office.funds);
+  finance.dataset.research = String(office.research);
+  finance.dataset.grant = String(office.grant);
+  finance.dataset.debt = office.debt ? "yes" : "no";
+  finance.dataset.income = String(office.income);
+  finance.dataset.upkeep = String(office.upkeep);
+  finance.dataset.roster = String(office.count);
+  finance.dataset.hire = String(office.hirePrice);
+  finance.replaceChildren();
+  [
+    `Funds ${office.funds}`,
+    `Income ${office.income}`,
+    `Upkeep ${office.upkeep}`,
+    `Research grant ${office.grant}`,
+    office.debt ? "Debt: hiring closed" : "Books are open"
+  ].forEach((text) => {
+    const line = document.createElement("p");
+    line.textContent = text;
+    finance.appendChild(line);
+  });
+  study.replaceChildren();
+  office.nodes.forEach((node) => {
+    const line = document.createElement("p");
+    line.textContent =
+      `${node.name} ${node.cost} ${node.open ? "open" : "locked"}`;
+    study.appendChild(line);
+  });
+  roster.replaceChildren();
+  const squad = document.createElement("p");
+  squad.textContent = `Squad ${office.picks.join(" ")}`;
+  roster.appendChild(squad);
+  office.roster.forEach((agent, index) => {
+    const line = document.createElement("p");
+    const state = agent.alive ? "ready" : "dead";
+    line.textContent =
+      `${agent.name} ${state} hp ${agent.health}`
+      + ` acc ${agent.accuracy} spd ${agent.speed}`
+      + ` mor ${agent.morale} ${agent.weapon}`
+      + ` aug ${agent.augments} arm ${agent.armour}`;
+    roster.appendChild(line);
+    if (agent.alive && wasmExports) {
+      const send = document.createElement("button");
+      send.type = "button";
+      send.textContent = `Send ${agent.name}`;
+      send.addEventListener("click", () => {
+        const slot = office.picks.findIndex((pick) => pick === 0);
+        const chosen = slot < 0 ? 1 : slot + 1;
+        wasmExports.megacorp_command(10, chosen, index + 1, 0, 0, 0);
+        showWasmDay();
+      });
+      roster.appendChild(send);
+    }
+  });
+  if (office.hiring) {
+    const next = document.createElement("p");
+    next.textContent =
+      `Next hire ${office.candidate}`
+      + ` hp ${office.candidateStats.health}`
+      + ` for ${office.hirePrice}`;
+    roster.appendChild(next);
+  }
+}
+
 function showWasmDay() {
   const world = readWasmWorld();
   worldData = world;
@@ -823,6 +981,7 @@ function showWasmDay() {
       corps.appendChild(line);
     });
   }
+  paintOffice();
   if (strategicId > 0) {
     showStrategic(strategicId);
   }
@@ -1396,6 +1555,22 @@ async function main() {
     });
     document.getElementById("sheet-handle").addEventListener("click", () => {
       document.getElementById("sheet").classList.toggle("open");
+    });
+    document.getElementById("hire").addEventListener("click", () => {
+      wasmExports.megacorp_command(7, 0, 0, 0, 0, 0);
+      showWasmDay();
+    });
+    document.getElementById("fund-0").addEventListener("click", () => {
+      wasmExports.megacorp_command(8, 0, 0, 0, 0, 0);
+      showWasmDay();
+    });
+    document.getElementById("fund-40").addEventListener("click", () => {
+      wasmExports.megacorp_command(8, 40, 0, 0, 0, 0);
+      showWasmDay();
+    });
+    document.getElementById("fund-80").addEventListener("click", () => {
+      wasmExports.megacorp_command(8, 80, 0, 0, 0, 0);
+      showWasmDay();
     });
   } catch (err) {
     document.getElementById("engine").textContent = "engine: trace";
