@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.25.0</title>
+  <title>Megacorp Simulator 0.26.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -110,6 +110,25 @@
       #sheet.open { transform: translateY(0); }
     }
     canvas { display: block; image-rendering: pixelated; background: #101216; border: 1px solid var(--line); }
+    #menu {
+      position: fixed;
+      inset: 0;
+      z-index: 6;
+      background: rgba(12, 14, 18, 0.96);
+      overflow: auto;
+      padding: 1.2rem 1.2rem 3rem;
+    }
+    #menu[hidden] { display: none; }
+    #menu h2 { margin: 0 0 0.6rem; }
+    #menu button {
+      display: block;
+      width: min(100%, 28rem);
+      min-height: 44px;
+      margin: 0.35rem 0;
+      text-align: left;
+    }
+    #menu .picked { outline: 2px solid #f2d36b; }
+    #menu p { max-width: 36rem; }
     #city { touch-action: none; }
     button[aria-pressed="true"] { outline: 2px solid #e7e4dc; }
     .note { color: var(--muted); margin-top: 0; }
@@ -118,7 +137,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.25.0</span>
+    <p class="meta">version <span id="version">0.26.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -137,6 +156,7 @@
     <button id="view" type="button">Flat view</button>
     <button id="world" type="button">World map</button>
     <button id="new-world" type="button">New world</button>
+    <button id="game-menu" type="button">Menu</button>
     <button id="sim-pause" type="button">Pause</button>
     <button id="sim-1" type="button" aria-pressed="true">1x</button>
     <button id="sim-2" type="button">2x</button>
@@ -185,6 +205,7 @@
     <h2>Roster</h2>
     <section id="roster-panel"></section>
     <p><button id="hire" type="button">Hire</button></p>
+    <p><button id="reroll" type="button" hidden>Re-roll unvisited city</button></p>
   </aside>
   </div>
   <p class="note">Paths, ped motion, action queues, shots, and vehicles are
@@ -209,8 +230,12 @@
     it. Tap an enemy to attack. Win or lose returns that result to
     the world map.
     A click on a region opens that city's precomputed trace.</p>
-  <script src="js/store.js?v=025"></script>
-  <script src="js/play.js?v=025"></script>
-  <script src="js/map.js?v=025"></script>
+  <div id="menu" hidden>
+    <h2 id="menu-title">Megacorp</h2>
+    <div id="menu-body"></div>
+  </div>
+  <script src="js/store.js?v=026"></script>
+  <script src="js/play.js?v=026"></script>
+  <script src="js/map.js?v=026"></script>
 </body>
 </html>

@@ -330,7 +330,7 @@ const MegacorpPlay = (() => {
     }
   }
 
-  function setSpeed(next) {
+  function setSpeed(next, notify) {
     speed = next;
     ["sim-pause", "sim-1", "sim-2", "sim-4"].forEach((id) => {
       const button = document.getElementById(id);
@@ -343,6 +343,17 @@ const MegacorpPlay = (() => {
         || (id === "sim-4" && next === 4);
       button.setAttribute("aria-pressed", mine ? "true" : "false");
     });
+    if (notify && window.menuSetSpeed) {
+      window.menuSetSpeed(next);
+    }
+  }
+
+  function menuScreen() {
+    if (!window.readMenu) {
+      return -1;
+    }
+    const menu = window.readMenu();
+    return menu ? menu.screen : -1;
   }
 
   function frame(now) {
@@ -354,7 +365,8 @@ const MegacorpPlay = (() => {
       dt = 100;
     }
     last = now;
-    if (speed > 0) {
+    const screen = menuScreen();
+    if (screen === 6 && speed > 0) {
       acc += dt * speed;
     }
     let ticks = 0;
@@ -371,7 +383,7 @@ const MegacorpPlay = (() => {
       }
     }
     const mission = window.__city && window.__city.mission;
-    if (speed > 0 && !(mission && mission.mode === 1)) {
+    if (screen === 4 && speed > 0 && !(mission && mission.mode === 1)) {
       dayAcc += dt * speed;
       let days = 0;
       while (dayAcc >= dayMs && days < 4) {
@@ -393,6 +405,9 @@ const MegacorpPlay = (() => {
       }
     }
     draw();
+    if (window.paintMenu) {
+      window.paintMenu();
+    }
     requestAnimationFrame(frame);
   }
 
@@ -416,6 +431,10 @@ const MegacorpPlay = (() => {
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("pointercancel", onUp);
     window.addEventListener("keydown", (event) => {
+      const menu = window.readMenu && window.readMenu();
+      if (menu && menu.screen !== 4 && menu.screen !== 6) {
+        return;
+      }
       if (event.repeat) {
         return;
       }
@@ -426,13 +445,12 @@ const MegacorpPlay = (() => {
       event.preventDefault();
       send(3, code, 0, 0, 0, 0);
     });
-    document.getElementById("sim-pause").addEventListener("click", () => setSpeed(0));
-    document.getElementById("sim-1").addEventListener("click", () => setSpeed(1));
-    document.getElementById("sim-2").addEventListener("click", () => setSpeed(2));
-    document.getElementById("sim-4").addEventListener("click", () => setSpeed(4));
-    setSpeed(1);
+    document.getElementById("sim-pause").addEventListener("click", () => setSpeed(0, true));
+    document.getElementById("sim-1").addEventListener("click", () => setSpeed(1, true));
+    document.getElementById("sim-2").addEventListener("click", () => setSpeed(2, true));
+    document.getElementById("sim-4").addEventListener("click", () => setSpeed(4, true));
     requestAnimationFrame(frame);
   }
 
-  return { start };
+  return { start, setSpeed };
 })();

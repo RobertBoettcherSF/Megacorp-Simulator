@@ -33,6 +33,7 @@ with Megacorp.Assets.Import;
 with Megacorp.Play;
 with Megacorp.Research;
 with Megacorp.Session;
+with Megacorp.Menu;
 with Smoke_Check;
 
 procedure Megacorp_Smoke is
@@ -57,9 +58,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.25.0"
+     (Megacorp.Version = "0.26.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.25.0");
+      "version 0.26.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -2689,6 +2690,121 @@ begin
             and then Shown.Outcome.Met = 4,
             "the fixture mission wins");
       end;
+   end;
+
+   declare
+      package Books renames Megacorp.Menu;
+      use type Books.Screen;
+      use type Books.Effect;
+
+      Card : Books.Card;
+      Got : Books.Effect;
+   begin
+      Got := Books.Handle (Card, Books.Activate, 0);
+      Smoke_Check.Expect
+        (Card.Where = Books.New_Game and then Got = Books.Stay,
+         "the title opens a new game");
+      Got := Books.Handle (Card, Books.New_Scenario, 1);
+      Smoke_Check.Expect
+        (Got = Books.Make_Scenario
+         and then Books.Scenario_Seed (1) = 42
+         and then Card.Scenario = 1,
+         "a scenario is a fixed seed");
+      Card.Where := Books.Title;
+      Got := Books.Handle (Card, Books.Continue_Game, 0);
+      Smoke_Check.Expect
+        (Got = Books.Stay and then Card.Where = Books.Title,
+         "continue stays hidden without a save");
+      Card.Saved := True;
+      Got := Books.Handle (Card, Books.Continue_Game, 0);
+      Smoke_Check.Expect
+        (Got = Books.Load_Continue,
+         "continue offers a saved game");
+   end;
+
+   declare
+      package Native renames Megacorp.Data.Virtual_FS.Native;
+      package Globe renames Megacorp.World.Gen;
+      package Journal renames Megacorp.Save.Log;
+      use type Params.Play_Mode;
+
+      function Blocked
+        (Snap : Megacorp.Save.Snapshot;
+         Item : Megacorp.World.Atlas;
+         Region : Positive;
+         Expect : String) return Boolean;
+      function Blocked
+        (Snap : Megacorp.Save.Snapshot;
+         Item : Megacorp.World.Atlas;
+         Region : Positive;
+         Expect : String) return Boolean
+      is
+      begin
+         declare
+            Ev : constant Journal.Event :=
+              Journal.Reroll (Snap, Item, Region);
+            pragma Unreferenced (Ev);
+         begin
+            return False;
+         end;
+      exception
+         when Error : Megacorp.Save.Save_Error =>
+            return Ada.Exceptions.Exception_Message (Error) = Expect;
+      end Blocked;
+
+      Root : Native.Disk := Native.Open ("/tmp/megacorp-menu");
+      World : Megacorp.World.Atlas :=
+        Globe.Generate (42, Defaults);
+      Snap : Megacorp.Save.Snapshot :=
+        Megacorp.Save.Capture (World, 0, Params.Scenario);
+      Back : Megacorp.Save.Snapshot;
+      Home : Megacorp.World.Atlas;
+      City_2 : RNG.Word;
+      City_3 : RNG.Word;
+      Book : Journal.Journal;
+   begin
+      Ada.Directories.Create_Path ("/tmp/megacorp-menu");
+      Megacorp.Save.Store (Root, "scenario.mgc", Snap);
+      Back := Megacorp.Save.Load (Root, "scenario.mgc");
+      Home := Megacorp.Save.Rebuild (Back, Defaults);
+      Smoke_Check.Expect
+        (Back.Locked
+         and then Back.Play = Params.Scenario
+         and then Blocked
+           (Back, Home, 2, "scenario refuses re-roll")
+         and then Home.Area (2).City = World.Area (2).City
+         and then Home.Area (3).City = World.Area (3).City,
+         "a scenario world stays locked across reload");
+
+      World := Globe.Generate (42, Defaults);
+      Snap := Megacorp.Save.Capture (World, 0, Params.Free_Play);
+      City_2 := World.Area (2).City;
+      City_3 := World.Area (3).City;
+      Megacorp.Save.Store (Root, "free.mgc", Snap);
+      Book := Journal.Start (Root, "free.log", Snap);
+      Journal.Commit
+        (Root, "free.log", Snap, World, Book,
+         Journal.Reroll (Snap, World, 2));
+      Smoke_Check.Expect
+        (World.Area (2).City /= City_2
+         and then World.Area (3).City = City_3,
+         "a free-play re-roll leaves other regions");
+      Back := Megacorp.Save.Load (Root, "free.mgc");
+      Home := Megacorp.Save.Rebuild (Back, Defaults);
+      Book := Journal.Load (Root, "free.log");
+      Journal.Replay (Back, Home, Book);
+      Smoke_Check.Expect
+        (Home.Area (2).City = World.Area (2).City
+         and then Home.Area (3).City = City_3
+         and then Journal.Notice (Book) = "",
+         "a free-play re-roll survives reload");
+      Journal.Commit
+        (Root, "free.log", Back, Home, Book,
+         Journal.Mission_Done (2, Megacorp.Save.Won, 12));
+      Smoke_Check.Expect
+        (Blocked (Back, Home, 2, "visited region stays")
+         and then Home.Area (2).City = World.Area (2).City,
+         "a visited region is not re-rolled after reload");
    end;
 
    if Smoke_Check.Failure_Count = 0 then

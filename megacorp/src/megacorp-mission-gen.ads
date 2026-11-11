@@ -76,6 +76,12 @@ package Megacorp.Mission.Gen is
    --  The recipe Build would pick, without generating the city.
    function Preview (Seed : RNG.Word) return Recipe_Kind;
 
+   --  The same words the briefing screen shows. They follow the
+   --  recipe and do not draw from the mission stream.
+   function Objective (Kind : Recipe_Kind) return String;
+
+   function Estimate (Kind : Recipe_Kind) return String;
+
    function Same (A, B : Scene) return Boolean;
 
    function Reachable (M : Map.City; Plan : Scene) return Boolean;
