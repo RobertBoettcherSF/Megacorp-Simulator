@@ -517,6 +517,69 @@ package body Megacorp.Save.Log is
       return "";
    end Notice;
 
+   function Interesting (Ev : Event) return Boolean;
+   function Headline_Of (Ev : Event) return String;
+
+   function Interesting (Ev : Event) return Boolean is
+   begin
+      case Ev.Kind is
+         when Kind_Region | Kind_Mission =>
+            return True;
+         when Kind_Day =>
+            return Ev.Input = Tax_Input;
+         when others =>
+            return False;
+      end case;
+   end Interesting;
+
+   function Headline_Of (Ev : Event) return String is
+   begin
+      case Ev.Kind is
+         when Kind_Region =>
+            return "Region " & Trim (Ev.Region)
+              & " held by " & Trim (Ev.Owner);
+         when Kind_Mission =>
+            return "Mission " & Trim (Ev.Region)
+              & " " & Outcome_Name (Ev.Outcome);
+         when Kind_Day =>
+            return "Tax on region " & Trim (Ev.Region)
+              & " is " & Trim (Ev.Tax);
+         when others =>
+            return "";
+      end case;
+   end Headline_Of;
+
+   function Headline_Count (Book : Journal) return Natural is
+      Total : Natural := 0;
+   begin
+      for I in reverse 1 .. Book.Count loop
+         if Interesting (Book.Item (I)) then
+            Total := Total + 1;
+            if Total = 8 then
+               return Total;
+            end if;
+         end if;
+      end loop;
+      return Total;
+   end Headline_Count;
+
+   function Headline
+     (Book : Journal;
+      Index : Positive) return String
+   is
+      Seen : Natural := 0;
+   begin
+      for I in reverse 1 .. Book.Count loop
+         if Interesting (Book.Item (I)) then
+            Seen := Seen + 1;
+            if Seen = Index then
+               return Headline_Of (Book.Item (I));
+            end if;
+         end if;
+      end loop;
+      return "";
+   end Headline;
+
    function Day_None return Event is
    begin
       return (Kind => Kind_Day, Input => No_Input, others => <>);

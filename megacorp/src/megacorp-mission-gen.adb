@@ -711,6 +711,21 @@ package body Megacorp.Mission.Gen is
       end loop;
    end Place;
 
+   function Preview (Seed : RNG.Word) return Recipe_Kind is
+      Mission_G : RNG.Generator :=
+        RNG.Child (RNG.Make (Seed), RNG.Mission, 1);
+      Pick : constant Integer := RNG.Pick (Mission_G, 0, 2);
+   begin
+      case Pick is
+         when 0 =>
+            return Briefing;
+         when 1 =>
+            return Snatch;
+         when others =>
+            return Contract;
+      end case;
+   end Preview;
+
    function Build (M : Map.City; Seed : RNG.Word) return Scene is
       Plan : Scene;
    begin

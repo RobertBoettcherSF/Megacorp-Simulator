@@ -55,9 +55,9 @@ procedure Megacorp_Smoke is
    Later    : Megacorp.Host.Milliseconds;
 begin
    Smoke_Check.Expect
-     (Megacorp.Version = "0.23.0"
+     (Megacorp.Version = "0.24.0"
       and then Megacorp.Name = "Megacorp Simulator",
-      "version 0.23.0");
+      "version 0.24.0");
    declare
       package Globe renames Megacorp.World.Gen;
       package Camp renames Megacorp.World.Campaign;
@@ -163,6 +163,36 @@ begin
       Smoke_Check.Expect
         (Again = First,
          "a replayed command sequence gives the same digest");
+   end;
+   declare
+      package Globe renames Megacorp.World.Gen;
+      package Camp renames Megacorp.World.Campaign;
+      use type Megacorp.Mission.Gen.Recipe_Kind;
+      World : Megacorp.World.Atlas;
+      Area : Megacorp.World.Region;
+      Press : Integer;
+      Held : Natural := 0;
+      Kind : Megacorp.Mission.Gen.Recipe_Kind;
+   begin
+      World := Globe.Generate (42, Defaults);
+      Area := World.Area (1);
+      Press := Camp.Threat (World, 1);
+      Kind := Megacorp.Mission.Gen.Preview (Area.City);
+      Smoke_Check.Expect
+        (Camp.Income (Area.Population, Area.Tax)
+           = Area.Population * Area.Tax / 1000
+         and then Camp.Influence (Area.Defence, Area.Tech)
+           = Area.Defence + Area.Tech
+         and then Press = Camp.Threat (World, 1)
+         and then Kind = Megacorp.Mission.Gen.Preview (Area.City),
+         "income, influence, pressure, and recipe come from Ada");
+      for C in 1 .. World.Corps loop
+         Held := Held + Camp.Holdings (World, C);
+      end loop;
+      Camp.Advance (World);
+      Smoke_Check.Expect
+        (Held = 40 and then Camp.Strength (World, 1) > 0,
+         "corporation strength is defined for the campaign");
    end;
    declare
       package Native renames Megacorp.Data.Virtual_FS.Native;

@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.24.0, item 24
+
+The world map is the strategic screen. Regions are drawn in the owner's colour. The player's regions are marked, and visited regions are drawn differently from unvisited ones. A hover or a tap opens a panel of owner, population, unrest, influence, income, the AI attack score, and the mission recipe. A corporations list shows region counts and strength. Pause, 1x, 2x, and 4x advance the campaign. Border fights and mission results from the delta log scroll in a ticker. On a narrow screen the panel is a bottom sheet. Ada computes every figure. JavaScript only draws.
+
 ### 2026-11-11 — version 0.23.0, item 23
 
 Clicking a region on the world map starts that city's recipe in the live tick. The squad is up to four agents. The objective is the recipe's zone: reach it, escort to it, or sabotage the marked building. An enemy and a police officer are on the map and use the behaviour from item 10. Tap an enemy to attack. Reaching the zone wins. Standing still until the cap, or losing the squad, loses. The result is a mission line and a region line in the delta log. A win gives the region to the player and lowers unrest. A loss raises unrest. The region is marked visited either way.
@@ -370,6 +374,16 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **One path for the replay.** The region click is logged as an order whose payload includes the city seed. Applying that order starts the mission, so the smoke test and a reload run the same calls. The scripted win is select the lead, order the zone, and tick. The scripted loss is tick without an order until the cap.
 
+### Item 24 — world-map UI
+
+**Ada computes, the page draws.** Income is population times tax, divided by 1000. Influence is defence plus tech, capped at 255. It is not unrest. AI pressure is the highest attack score among neighbouring corporations that can afford a strike, the same score item 16 uses, and zero when nobody can. The recipe preview is the same first draw `Mission.Gen.Build` makes from the city seed, so the name matches the mission without generating the city. Strength is the defence and tech of the regions a corporation holds. Visited comes from the snapshot.
+
+**The log is the ticker.** A campaign day that changes an owner appends the existing region record. The headline is "Region N held by C" for a border fight, "Mission N won" or lost for a mission, and a tax line when the rate was an input. Day lines with no input are not news. The brief keeps those headlines even after the log is folded.
+
+**The campaign clock.** Pause, 1x, 2x, and 4x spend accumulated frame time as strategic days, one second at 1x. They do not advance the campaign while a mission is in progress. The city tick still uses the same buttons inside a mission.
+
+**The narrow screen.** Below 720px the side panel is a bottom sheet. Tapping a region opens it. The handle collapses it. The map width follows the page, so the iPhone view is the same data on a smaller canvas.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -380,7 +394,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–23 (version 0.23.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–24 (version 0.24.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -771,7 +785,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 
 ### Phase F — Campaign layer and audio
 
-24. **World-map UI.** Select region, see owners, tax/happiness, launch a mission, return after debrief with persisted territory. Depends on: 15, 16, 23. Try: play two missions in different regions; both results stay saved. Size: medium (FreeSynd `mapmenu.cpp` 463 is the reference for the screen’s job; the art is ours).
+24. **World-map UI.** Done in 0.24.0. The map is coloured by owner, the player's regions are marked, and visited regions are drawn differently. A hover or tap opens Ada's figures for that region: owner, population, unrest, influence, income, AI pressure, and the recipe preview. Corporations list region counts and strength. Pause, 1x, 2x, and 4x advance the campaign. Border fights and mission results from the delta log are the ticker. A narrow window uses a bottom sheet. Depends on: 15, 16, 23. Try: open `web/index.html`, hover a region, and read the panel. Let the day run and see a border fight in the log. Size: medium.
 25. **Agents, equipment, research, economy.** Roster, mods, weapon shop, research tree, money. Depends on: 17, 24. Try: start research, skip campaign time (or play a mission), see it complete; agents keep mods after reload. Size: medium (`research*` + `agent*` + select menu are ~2,000+ lines in the reference tree).
 26. **Menus and briefing.** Title, new/load world, debrief stats. No intro FLI. Depends on: 24. Try: a complete session without command-line flags. Size: medium (`menus/` is 10,852 lines in C++, much of it layout we can simplify).
 27. **Sound and music.** WebAudio and own placeholder SFX, plus a music toggle. Depends on: 22. Try: shots and a music toggle. Size: small-medium.
