@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.22.0</title>
+  <title>Megacorp Simulator 0.23.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -80,7 +80,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.22.0</span>
+    <p class="meta">version <span id="version">0.23.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -119,6 +119,7 @@
     </span>
     <div id="legend"></div>
   </div>
+  <p id="objective" class="readout">Click a region to take a mission.</p>
   <p id="path-status" class="readout">Paths and ped motion are precomputed by Ada.</p>
   <p id="hover" class="readout">Hover a tile.</p>
   <div id="stage">
@@ -141,11 +142,13 @@
     Reload continues that day. New world starts again. Import stores
     a tileset or sprite only after the Ada module accepts it.
     The city beside the world map is ticked by Ada. Pause, 1x, 2x,
-    and 4x change how fast those ticks run. Tap a person, then tap
-    a tile, to send them walking.
+    and 4x change how fast those ticks run. Click a region to take
+    its mission. Tap a person, then tap the marked tile, to finish
+    it. Tap an enemy to attack. Win or lose returns that result to
+    the world map.
     A click on a region opens that city's precomputed trace.</p>
-  <script src="js/store.js?v=022"></script>
-  <script src="js/play.js?v=022"></script>
-  <script src="js/map.js?v=022"></script>
+  <script src="js/store.js?v=023b"></script>
+  <script src="js/play.js?v=023b"></script>
+  <script src="js/map.js?v=023b"></script>
 </body>
 </html>

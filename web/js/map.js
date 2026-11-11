@@ -1099,6 +1099,12 @@ async function main() {
         + ` · pop ${region.population}k · tech ${region.tech}`
         + ` · tax ${region.tax} · unrest ${region.unrest}`
         + ` · city seed ${region.city_seed}`;
+      if (wasmLive && wasmExports && wasmExports.megacorp_command) {
+        wasmExports.megacorp_command(6, region.id, 0, 0, 0, 0);
+        document.getElementById("objective").textContent =
+          `${region.name}: mission starting`;
+        return;
+      }
       showWorld = false;
       document.getElementById("world").textContent = "World map";
       const summary = `${region.name}: ${owner ? owner.name : "unclaimed"}`
@@ -1143,6 +1149,10 @@ async function main() {
       slider.addEventListener("input", () => {
         if (wasmLive && wasmExports) {
           const target = Number(slider.value);
+          const mission = window.__city && window.__city.mission;
+          if (mission && mission.mode === 1) {
+            return;
+          }
           wasmExports.megacorp_reset(42);
           if (target > 0) {
             wasmExports.megacorp_advance(target);
@@ -1239,10 +1249,14 @@ async function main() {
       }
       const view = new DataView(wasmExports.memory.buffer);
       const day = view.getUint32(wasmExports.megacorp_state(), true);
-      if (day >= 120) {
-        wasmExports.megacorp_reset(42);
-      } else {
-        wasmExports.megacorp_advance(1);
+      try {
+        if (day >= 120) {
+          wasmExports.megacorp_reset(42);
+        } else {
+          wasmExports.megacorp_advance(1);
+        }
+      } catch (err) {
+        /* The day line stays on the last good snapshot. */
       }
       showWasmDay();
       if (showWorld) {

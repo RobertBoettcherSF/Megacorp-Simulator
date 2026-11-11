@@ -2,6 +2,10 @@
 
 ## Changelog
 
+### 2026-11-11 — version 0.23.0, item 23
+
+Clicking a region on the world map starts that city's recipe in the live tick. The squad is up to four agents. The objective is the recipe's zone: reach it, escort to it, or sabotage the marked building. An enemy and a police officer are on the map and use the behaviour from item 10. Tap an enemy to attack. Reaching the zone wins. Standing still until the cap, or losing the squad, loses. The result is a mission line and a region line in the delta log. A win gives the region to the player and lowers unrest. A loss raises unrest. The region is marked visited either way.
+
 ### 2026-11-11 — version 0.22.0, item 22
 
 The page ticks a generated 128 by 128 city inside the wasm module. `requestAnimationFrame` accumulates time and calls `megacorp_play` with a whole number of 33 ms steps, so the simulation does not depend on the frame rate. Pause, 1x, 2x, and 4x scale that accumulator. Pointer and key events are five integers. Ada selects a person, orders a walk, pans, and zooms. A touch drag pans and a pinch zooms. The city is drawn beside the world map, with the people and the cars moving. Each command and each batch of ticks is a line in the delta log. Replaying that log reproduces the city digest.
@@ -358,6 +362,14 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 **The log.** `order` and `ticks` are delta-log lines. `Commit` applies them, so a replay is the same calls in the same order. The city digest mixes the tick, the camera, and every person and car. When the log is folded, the current city is written to `city.mgc` first, and the next load reads that file before replaying the lines that came after. A new world replaces both.
 
+### Item 23 — the first playable mission
+
+**The recipe, not a new mission.** `Mission.Gen.Build` still chooses briefing, snatch, or contract and the zone. The live cast is the squad from that recipe, plus one hostile and one police officer, not the whole generated crowd. The squad is dropped a few tiles from the zone so the walk is the objective rather than a hike across the city. The hostile is kept far enough away that a straight walk is not a firefight. Walking up to them and tapping is an attack. Their shots and the police reaction are `Behaviour.Step`, the same machine as item 10.
+
+**Win and loss.** An agent standing on the zone wins. No agents left, or 48 ticks without the zone, loses. The page then shows the world map again. A win sets the owner to the player, adds defence, and clears unrest. A loss adds unrest and leaves the owner. Both set the visited flag through the existing mission and region log lines, so a later day does not re-roll that region in free play.
+
+**One path for the replay.** The region click is logged as an order whose payload includes the city seed. Applying that order starts the mission, so the smoke test and a reload run the same calls. The scripted win is select the lead, order the zone, and tick. The scripted loss is tick without an order until the cap.
+
 ### 2026-11-10 — Robert's decisions (override anything later in this document that conflicts)
 
 1. **Language and route.** All logic, and as much of the rest as possible, in plain Ada. JavaScript is only a thin browser layer (canvas, audio, input, storage). The Ada core is built natively first with GNAT 12.3 and gprbuild, and later compiled to WebAssembly (GNAT-LLVM / AdaWebPack). A WebSocket server is the fallback.
@@ -368,7 +380,7 @@ Robert's standing rule for this night is to skip the C++ comparison. No harness,
 
 Items below are renumbered **1–28** after those two drops. "Own IP" here is the setting and the art (old question 7), not a choice of software licence. The licence tag (old question 12) is still open; the 0.1.0 skeleton uses GPL-2-or-later headers, matching FreeSynd's file headers and item 1, until that choice is closed.
 
-**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–22 (version 0.22.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
+**Status:** agreed design, updated 11 November 2026. Items 1–11 and 13–23 (version 0.23.0) are implemented under `megacorp/`. Item 12 is skipped, so there is no 0.12.0. The browser check page is `web/`. The code we wrote is MIT. The WebAssembly runtime linked into `web/megacorp.wasm` is GPL-3.0 with the GCC Runtime Library Exception 3.1. Why that does not make this project GPL is logged under "Runtime licence" above and in the root `NOTICE` file.  
 **Date:** 10 November 2026, Europe/Berlin  
 **Source repo:** https://github.com/RobertBoettcherSF/Megacorp-Simulator (branch `master`)  
 **Last upstream FreeSynd work:** 19 February 2015, 07:44 Europe/Berlin (`Rework action for police : finished.`, author benblan)  
@@ -755,7 +767,7 @@ Each item is meant to be buildable and testable on its own. “Depends on” lis
 20. **WASM toolchain spike.** Done in 0.20.0. AdaWebPack 22.1.0 llvm-gnat emits the world core as `web/megacorp.wasm`. The page calls `megacorp_init` and `megacorp_step` and draws the live map. Seed 42 matches the native engine check. Depends on: 1, 15, 16. Try: open `web/index.html`; the header says `engine: wasm` and the day counter moves. `node megacorp/wasm/check.mjs` compares the module with `bin/megacorp --engine-check`. Size: spike.
 21. **Browser storage.** Done in 0.21.0. The wasm module reads and writes `slot.mgc` and `slot.log` through `Virtual_FS.Browser`. The page uses OPFS, IndexedDB when OPFS cannot be opened, and a localStorage mirror of the two save files. Reload continues the saved day. New world resets it. A chosen tileset or sprite is stored only after `Megacorp.Assets.Import` accepts it. Depends on: 4, 17, 20. Try: open `web/index.html`, let the day move, reload, and see the same day; New world starts again. Size: medium (JS + Host bindings).
 22. **Input and tick in the page.** Done in 0.22.0. The wasm module ticks a 128 by 128 city. The page accumulates animation frames into fixed steps and offers Pause, 1x, 2x, and 4x. Pointer and key events are a command queue. Ada selects, orders a walk, and pans or zooms. Commands and tick batches are delta-log lines, and a replay matches the city digest. Depends on: 20, 11, 13. Try: open `web/index.html`, tap a person, tap a tile, and watch them walk. Speed changes how fast the sim counter moves. Size: medium.
-23. **Playable first mission.** A generated block, at least one complete-able objective, shooting and movement, success/fail screen, then a save. Depends on: 14, 22, 17. Try: generate seed 42, finish the mission in the browser, reload, see the outcome and any destruction persist. Size: integration; this is the first “it feels like a game” milestone. Rough logic already built in B–D; UI glue is the added work.
+23. **Playable first mission.** Done in 0.23.0. A region click starts that city's recipe with a squad of up to four agents. The objective is on screen. Reaching the zone wins. A timeout or a dead squad loses. The result changes ownership or unrest, marks the region visited, and is stored in the delta log. Depends on: 14, 22, 17, 10. Try: open `web/index.html`, click a region, tap an agent, tap the marked tile, and see the world map show the new owner. Size: integration.
 
 ### Phase F — Campaign layer and audio
 

@@ -6,6 +6,8 @@ with System;
 with Megacorp.Data.Virtual_FS;
 with Megacorp.Map;
 with Megacorp.RNG;
+with Megacorp.Save;
+with Megacorp.World;
 
 --  Item 22. One city, ticked by the page.
 --  JavaScript sends compact commands. This package selects,
@@ -18,7 +20,28 @@ package Megacorp.Play is
 
    procedure Open (City_Seed : RNG.Word);
 
+   --  Item 23. A recipe mission in this city. Region is the
+   --  atlas index the result is written back to.
+   procedure Begin_Mission (City_Seed : RNG.Word; Region : Positive);
+
    function Ready return Boolean;
+
+   --  0 sandbox, 1 running, 2 won, 3 lost, 4 timed out.
+   function Mission_Ending return Natural;
+
+   function Mission_Region return Natural;
+
+   function Zone_X return Positive;
+
+   function Zone_Y return Positive;
+
+   function Needs_Settle return Boolean;
+
+   --  Copy the outcome onto the atlas and mark the region visited.
+   --  A second call does nothing.
+   procedure Settle
+     (Item : in out World.Atlas;
+      Snap : in out Save.Snapshot);
 
    --  Code 1 tap, 2 box drag, 3 key, 4 pinch, 5 touch pan.
    --  Coordinates are city-canvas pixels. Keys are 1..4
