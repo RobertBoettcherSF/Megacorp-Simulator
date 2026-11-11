@@ -363,6 +363,7 @@ package body Megacorp.Wasm_Store is
         ("AdaWebPack libgnat is GPL-3.0 with the GCC Runtime", 72);
       Put_M_Text
         ("Library Exception 3.1, so this project stays MIT.", 72);
+      Put_M (Card.Trouble);
    end Write_Menu;
 
    procedure Put_S (Value : Natural) is
@@ -640,7 +641,14 @@ package body Megacorp.Wasm_Store is
    end Save_Game;
 
    procedure Load_Game is
+      Text : constant String := Host_Files.Read (Files, "slot.mgc");
    begin
+      if not Save.Looks_Saved (Text) then
+         Menu.Note_Trouble (Card, 1);
+         Card.Where := Menu.Title;
+         World_Ready := False;
+         return;
+      end if;
       Snap := Save.Load (Files, "slot.mgc");
       Globe := Save.Rebuild (Snap, Parameters.Defaults);
       Open_City;
@@ -789,6 +797,7 @@ package body Megacorp.Wasm_Store is
                Load_Game;
             exception
                when others =>
+                  Menu.Note_Trouble (Card, 1);
                   Card.Where := Menu.Title;
                   World_Ready := False;
             end;

@@ -213,9 +213,8 @@ package body Megacorp.World.Campaign is
    procedure Mark (Item : in out Atlas) is
    begin
       for C in 1 .. Item.Corps loop
-         if Holdings_Of (Item, C) = 0 then
-            Item.Company (C).Eliminated := True;
-         end if;
+         Item.Company (C).Eliminated :=
+           Holdings_Of (Item, C) = 0;
       end loop;
    end Mark;
 

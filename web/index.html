@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.27.0</title>
+  <title>Megacorp Simulator 0.28.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -46,7 +46,30 @@
       border-radius: 4px;
       padding: 0.2rem 0.6rem;
     }
+    button, select {
+      min-height: 44px;
+      font-size: 1rem;
+      padding: 0.4rem 0.75rem;
+    }
     button { cursor: pointer; }
+    #loading, #hints {
+      position: fixed;
+      z-index: 8;
+      left: 50%;
+      top: 18vh;
+      transform: translateX(-50%);
+      width: min(92vw, 28rem);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    #hints[hidden], #loading[hidden], #boot-fail[hidden] { display: none; }
+    @media (max-width: 720px) {
+      body { font-size: 17px; }
+      h1 { font-size: 1.6rem; }
+      .readout { font-size: 15px; }
+    }
     #legend { display: flex; flex-wrap: wrap; gap: 0.7rem; }
     .swatch {
       display: inline-flex;
@@ -135,9 +158,16 @@
   </style>
 </head>
 <body>
+  <div id="loading" role="status">Loading the simulation…</div>
+  <p id="boot-fail" class="readout" hidden></p>
+  <div id="hints" hidden>
+    <p id="hint-text"></p>
+    <button id="hint-next" type="button" title="Next tip">Next</button>
+    <button id="hint-skip" type="button" title="Skip the tips">Skip</button>
+  </div>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.27.0</span>
+    <p class="meta">version <span id="version">0.28.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -155,8 +185,8 @@
     <span id="queue">No action queue on this trace.</span>
     <button id="view" type="button">Flat view</button>
     <button id="world" type="button">World map</button>
-    <button id="new-world" type="button">New world</button>
-    <button id="game-menu" type="button">Menu</button>
+    <button id="new-world" type="button" title="Choose a scenario or a free-play seed">New world</button>
+    <button id="game-menu" type="button" title="Resume, save, or quit">Menu</button>
     <button id="sim-pause" type="button">Pause</button>
     <button id="sim-1" type="button" aria-pressed="true">1x</button>
     <button id="sim-2" type="button">2x</button>
@@ -234,9 +264,9 @@
     <h2 id="menu-title">Megacorp</h2>
     <div id="menu-body"></div>
   </div>
-  <script src="js/store.js?v=027h"></script>
-  <script src="js/sound.js?v=027h"></script>
-  <script src="js/play.js?v=027h"></script>
-  <script src="js/map.js?v=027h"></script>
+  <script src="js/store.js?v=028c"></script>
+  <script src="js/sound.js?v=028c"></script>
+  <script src="js/play.js?v=028c"></script>
+  <script src="js/map.js?v=028c"></script>
 </body>
 </html>

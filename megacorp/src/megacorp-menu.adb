@@ -306,6 +306,7 @@ package body Megacorp.Menu is
             if Item.Where = Title or else Item.Where = Atlas then
                Item.Where := New_Game;
                Item.Cursor := 0;
+               Item.Trouble := 0;
             end if;
          when Open_Settings =>
             if Item.Where = Title then
@@ -329,6 +330,11 @@ package body Megacorp.Menu is
          Item.Under := Next;
       end if;
    end Arrive;
+
+   procedure Note_Trouble (Item : in out Card; Code : Natural) is
+   begin
+      Item.Trouble := Code;
+   end Note_Trouble;
 
    procedure Note_Result
      (Item : in out Card;

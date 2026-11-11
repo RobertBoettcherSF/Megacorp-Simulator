@@ -102,7 +102,7 @@ package Megacorp.Save is
       Agent    : Squad_Table;
       Missions  : Natural := 0;
       Mission   : Mission_Table;
-      Funds     : Integer := 1500;
+      Funds     : Integer := 2400;
       Grant     : Natural := 0;
       Roster_Count : Natural := 0;
       Roster    : Agents.Roster_Table;
@@ -167,6 +167,9 @@ package Megacorp.Save is
      (Disk : Data.Virtual_FS.Backend'Class;
       Path : String) return Snapshot
      with Pre => Data.Virtual_FS.Exists (Disk, Path);
+
+   --  True when the text has the save header. It does not raise.
+   function Looks_Saved (Text : String) return Boolean;
 
    function Image (Snap : Snapshot) return String;
 

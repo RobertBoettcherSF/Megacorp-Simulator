@@ -14,10 +14,15 @@ use type Megacorp.RNG.Word;
 --  so a thin day can leave it negative. Campaign cash on the
 --  atlas is a different number and is not touched.
 package Megacorp.Session is
-   Opening_Funds : constant Integer := 1500;
+   Opening_Funds : constant Integer := 2400;
    Hire_Price    : constant := 400;
-   Upkeep_Each   : constant := 30;
-   Loot_Base     : constant := 250;
+   Upkeep_Each   : constant := 10;
+   Loot_Base     : constant := 1200;
+   --  The purse collects this many times the item 24 region
+   --  formula. The atlas cash used by the other corporations
+   --  stays on the original formula, so the world digest does not
+   --  move.
+   Purse_Scale   : constant := 4;
    Grant_Low     : constant := 40;
    Grant_High    : constant := 80;
 
