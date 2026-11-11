@@ -588,6 +588,8 @@ let showWorld = false;
 
 let wasmExports = null;
 let wasmLive = false;
+let strategicId = 0;
+let writingDay = false;
 let wasmTimer = null;
 
 function readAscii(view, offset, length) {
@@ -689,6 +691,111 @@ function readWasmWorld() {
   return { day, corporations, regions, links };
 }
 
+function readBrief() {
+  if (!wasmExports || !wasmExports.megacorp_brief) {
+    return null;
+  }
+  const view = new DataView(wasmExports.memory.buffer);
+  let cursor = wasmExports.megacorp_brief();
+  cursor += 1;
+  const regionCount = view.getUint8(cursor);
+  cursor += 1;
+  const corpCount = view.getUint8(cursor);
+  cursor += 1;
+  const newsCount = view.getUint8(cursor);
+  cursor += 1;
+  const regions = [];
+  for (let i = 0; i < regionCount; i += 1) {
+    const visited = view.getUint8(cursor) === 1;
+    cursor += 1;
+    const income = view.getUint16(cursor, true);
+    cursor += 2;
+    const influence = view.getUint8(cursor);
+    cursor += 1;
+    const pressure = view.getInt16(cursor, true);
+    cursor += 2;
+    const recipeCode = view.getUint8(cursor);
+    cursor += 1;
+    const nameLength = view.getUint8(cursor);
+    cursor += 1;
+    const recipe = readAscii(view, cursor, nameLength);
+    cursor += 16;
+    regions.push({
+      visited, income, influence, pressure, recipeCode, recipe
+    });
+  }
+  const corps = [];
+  for (let i = 0; i < corpCount; i += 1) {
+    const count = view.getUint8(cursor);
+    cursor += 1;
+    const strength = view.getUint16(cursor, true);
+    cursor += 2;
+    cursor += 1;
+    corps.push({ count, strength });
+  }
+  const news = [];
+  for (let i = 0; i < newsCount; i += 1) {
+    const length = view.getUint8(cursor);
+    cursor += 1;
+    news.push(readAscii(view, cursor, length));
+    cursor += 79;
+  }
+  return { regions, corps, news };
+}
+
+function showStrategic(regionId) {
+  const world = readWasmWorld();
+  const brief = readBrief();
+  if (!brief || !world.regions[regionId - 1]) {
+    return;
+  }
+  strategicId = regionId;
+  const region = world.regions[regionId - 1];
+  const row = brief.regions[regionId - 1];
+  const owner = world.corporations[region.owner - 1];
+  const panel = document.getElementById("region-panel");
+  panel.dataset.region = String(regionId);
+  panel.dataset.owner = owner ? owner.name : "";
+  panel.dataset.population = String(region.population);
+  panel.dataset.unrest = String(region.unrest);
+  panel.dataset.influence = String(row.influence);
+  panel.dataset.income = String(row.income);
+  panel.dataset.pressure = String(row.pressure);
+  panel.dataset.recipe = row.recipe;
+  panel.dataset.visited = row.visited ? "yes" : "no";
+  panel.replaceChildren();
+  const lines = [
+    region.name,
+    `Owner ${owner ? owner.name : "none"}`,
+    `Population ${region.population}`,
+    `Unrest ${region.unrest}`,
+    `Influence ${row.influence}`,
+    `Income ${row.income}`,
+    `AI pressure ${row.pressure}`,
+    `Recipe ${row.recipe}`,
+    row.visited ? "Visited" : "Unvisited"
+  ];
+  lines.forEach((text) => {
+    const line = document.createElement("p");
+    line.textContent = text;
+    panel.appendChild(line);
+  });
+  const corps = document.getElementById("corp-panel");
+  corps.replaceChildren();
+  world.corporations.forEach((corp, index) => {
+    const line = document.createElement("p");
+    const held = brief.corps[index];
+    line.textContent =
+      `${corp.name}: ${held.count} regions, strength ${held.strength}`;
+    corps.appendChild(line);
+  });
+  const log = document.getElementById("news");
+  log.textContent = brief.news.length
+    ? brief.news.join(" · ")
+    : "No border fights yet.";
+  document.getElementById("sheet").classList.add("open");
+}
+
 function showWasmDay() {
   const world = readWasmWorld();
   worldData = world;
@@ -696,11 +803,29 @@ function showWasmDay() {
     .map((corp) => `${corp.id}:${corp.cash}`)
     .join(" ");
   document.getElementById("day-label").textContent = String(world.day);
-  document.getElementById("day").value = String(Math.min(world.day, 365));
   document.getElementById("path-status").textContent =
     `Day ${world.day} cash ${cash}`;
   document.getElementById("engine").textContent = "engine: wasm";
   document.getElementById("seed-label").textContent = "world 42";
+  const brief = readBrief();
+  const log = document.getElementById("news");
+  if (brief && log) {
+    log.textContent = brief.news.length
+      ? brief.news.join(" · ")
+      : "No border fights yet.";
+    const corps = document.getElementById("corp-panel");
+    corps.replaceChildren();
+    world.corporations.forEach((corp, index) => {
+      const line = document.createElement("p");
+      const held = brief.corps[index];
+      line.textContent =
+        `${corp.name}: ${held.count} regions, strength ${held.strength}`;
+      corps.appendChild(line);
+    });
+  }
+  if (strategicId > 0) {
+    showStrategic(strategicId);
+  }
 }
 
 function ownerId(region, index) {
@@ -746,8 +871,11 @@ function nearestRegion(x, y, width, height) {
 function drawWorld() {
   const canvas = document.getElementById("map");
   const ctx = canvas.getContext("2d");
-  canvas.width = 900;
-  canvas.height = 560;
+  const room = canvas.parentElement ? canvas.parentElement.clientWidth : 900;
+  const width = Math.max(320, Math.min(900, room || 900));
+  canvas.width = width;
+  canvas.height = Math.round(width * 560 / 900);
+  const brief = readBrief();
   const image = ctx.createImageData(canvas.width, canvas.height);
   for (let y = 0; y < canvas.height; y += 1) {
     for (let x = 0; x < canvas.width; x += 1) {
@@ -776,12 +904,19 @@ function drawWorld() {
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
   });
-  ctx.fillStyle = "#111216";
-  worldData.regions.forEach((region) => {
+  worldData.regions.forEach((region, index) => {
+    const row = brief && brief.regions[index];
     const at = regionPoint(region, canvas.width, canvas.height);
+    const mine = region.owner === 1;
     ctx.beginPath();
-    ctx.arc(at.x, at.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(at.x, at.y, mine ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = mine ? "#f4f1ea" : "#111216";
     ctx.fill();
+    ctx.setLineDash(row && row.visited ? [] : [2, 2]);
+    ctx.strokeStyle = mine ? "#f2d36b" : "#f4f1ea";
+    ctx.lineWidth = mine ? 2 : 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
   });
   document.getElementById("zoom-label").textContent = "world";
 }
@@ -1050,6 +1185,9 @@ async function main() {
       const region = nearestRegion(
         point.x, point.y, canvas.width, canvas.height);
       document.getElementById("hover").textContent = region.name;
+      if (wasmLive) {
+        showStrategic(region.id);
+      }
       return;
     }
     if (!mapData) {
@@ -1099,6 +1237,7 @@ async function main() {
         + ` · pop ${region.population}k · tech ${region.tech}`
         + ` · tax ${region.tax} · unrest ${region.unrest}`
         + ` · city seed ${region.city_seed}`;
+      showStrategic(region.id);
       if (wasmLive && wasmExports && wasmExports.megacorp_command) {
         wasmExports.megacorp_command(6, region.id, 0, 0, 0, 0);
         document.getElementById("objective").textContent =
@@ -1147,6 +1286,9 @@ async function main() {
       const slider = document.getElementById("day");
       slider.max = String(campaignData.days || 0);
       slider.addEventListener("input", () => {
+        if (writingDay) {
+          return;
+        }
         if (wasmLive && wasmExports) {
           const target = Number(slider.value);
           const mission = window.__city && window.__city.mission;
@@ -1243,26 +1385,18 @@ async function main() {
       }
       document.getElementById("hover").textContent = `Imported ${file.name}.`;
     });
-    wasmTimer = setInterval(() => {
-      if (!wasmExports) {
+    canvas.addEventListener("pointermove", (event) => {
+      if (!showWorld || !wasmLive || !worldData) {
         return;
       }
-      const view = new DataView(wasmExports.memory.buffer);
-      const day = view.getUint32(wasmExports.megacorp_state(), true);
-      try {
-        if (day >= 120) {
-          wasmExports.megacorp_reset(42);
-        } else {
-          wasmExports.megacorp_advance(1);
-        }
-      } catch (err) {
-        /* The day line stays on the last good snapshot. */
-      }
-      showWasmDay();
-      if (showWorld) {
-        draw();
-      }
-    }, 700);
+      const point = canvasPoint(event);
+      const region = nearestRegion(
+        point.x, point.y, canvas.width, canvas.height);
+      showStrategic(region.id);
+    });
+    document.getElementById("sheet-handle").addEventListener("click", () => {
+      document.getElementById("sheet").classList.toggle("open");
+    });
   } catch (err) {
     document.getElementById("engine").textContent = "engine: trace";
   }

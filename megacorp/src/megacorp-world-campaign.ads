@@ -23,6 +23,20 @@ package Megacorp.World.Campaign is
 
    function Holdings (Item : Atlas; Corp : Positive) return Natural;
 
+   function Income (Population, Tax : Natural) return Natural;
+
+   --  Defence plus tech, capped at 255. Not unrest.
+   function Influence (Defence, Tech : Natural) return Natural;
+
+   --  Defence plus tech of the regions this corp holds.
+   function Strength (Item : Atlas; Corp : Positive) return Natural
+     with Pre => Corp <= Item.Corps;
+
+   --  Highest attack score a neighbour could spend on this region.
+   --  Zero when nobody bordering it can afford a strike.
+   function Threat (Item : Atlas; Region : Positive) return Integer
+     with Pre => Region <= Item.Regions;
+
    function Play
      (Seed : RNG.Word;
       Size : Parameters.Generator_Parameters;

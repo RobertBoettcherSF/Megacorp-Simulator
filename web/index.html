@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Megacorp Simulator 0.23.0</title>
+  <title>Megacorp Simulator 0.24.0</title>
   <style>
     :root {
       color-scheme: dark;
@@ -63,13 +63,51 @@
       font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
       font-size: 0.92rem;
     }
+    #board {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin: 0 1.2rem 1rem;
+    }
     #stage {
       display: flex;
       flex-wrap: wrap;
       gap: 0.6rem;
-      margin: 0 1.2rem 1rem;
       overflow: auto;
       max-height: 75vh;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    #sheet {
+      width: 280px;
+      flex: 0 0 280px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      max-height: 75vh;
+      overflow: auto;
+    }
+    #sheet h2 {
+      margin: 0.4rem 0;
+      font-size: 1rem;
+    }
+    #sheet p { margin: 0.2rem 0; }
+    #news { color: var(--muted); }
+    @media (max-width: 720px) {
+      #board { display: block; }
+      #sheet {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: auto;
+        max-height: 46vh;
+        border-radius: 12px 12px 0 0;
+        transform: translateY(72%);
+        z-index: 3;
+      }
+      #sheet.open { transform: translateY(0); }
     }
     canvas { display: block; image-rendering: pixelated; background: #101216; border: 1px solid var(--line); }
     #city { touch-action: none; }
@@ -80,7 +118,7 @@
 <body>
   <header>
     <h1>Megacorp Simulator</h1>
-    <p class="meta">version <span id="version">0.23.0</span>
+    <p class="meta">version <span id="version">0.24.0</span>
       · <span id="engine">engine: trace</span>
       · seed <span id="seed-label">…</span></p>
   </header>
@@ -122,9 +160,20 @@
   <p id="objective" class="readout">Click a region to take a mission.</p>
   <p id="path-status" class="readout">Paths and ped motion are precomputed by Ada.</p>
   <p id="hover" class="readout">Hover a tile.</p>
+  <div id="board">
   <div id="stage">
     <canvas id="city" width="480" height="480"></canvas>
     <canvas id="map"></canvas>
+  </div>
+  <aside id="sheet">
+    <button id="sheet-handle" type="button">Strategic</button>
+    <h2>Region</h2>
+    <section id="region-panel">Hover or tap a region.</section>
+    <h2>Corporations</h2>
+    <section id="corp-panel"></section>
+    <h2>Log</h2>
+    <section id="news">No border fights yet.</section>
+  </aside>
   </div>
   <p class="note">Paths, ped motion, action queues, shots, and vehicles are
     precomputed by Ada. Play, pause, and step replay that trace.
@@ -142,13 +191,14 @@
     Reload continues that day. New world starts again. Import stores
     a tileset or sprite only after the Ada module accepts it.
     The city beside the world map is ticked by Ada. Pause, 1x, 2x,
-    and 4x change how fast those ticks run. Click a region to take
+    and 4x also advance the campaign. Hover or tap a region for its
+    owner, income, and the corporation list. Click a region to take
     its mission. Tap a person, then tap the marked tile, to finish
     it. Tap an enemy to attack. Win or lose returns that result to
     the world map.
     A click on a region opens that city's precomputed trace.</p>
-  <script src="js/store.js?v=023b"></script>
-  <script src="js/play.js?v=023b"></script>
-  <script src="js/map.js?v=023b"></script>
+  <script src="js/store.js?v=024"></script>
+  <script src="js/play.js?v=024"></script>
+  <script src="js/map.js?v=024"></script>
 </body>
 </html>

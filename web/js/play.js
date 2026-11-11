@@ -15,7 +15,9 @@ const MegacorpPlay = (() => {
   let wasm = null;
   let speed = 1;
   let acc = 0;
+  let dayAcc = 0;
   let last = 0;
+  const dayMs = 1000;
   let started = false;
   const pointers = new Map();
   let pinchDist = 0;
@@ -366,6 +368,28 @@ const MegacorpPlay = (() => {
       } catch (err) {
         window.__playError = String(err);
         speed = 0;
+      }
+    }
+    const mission = window.__city && window.__city.mission;
+    if (speed > 0 && !(mission && mission.mode === 1)) {
+      dayAcc += dt * speed;
+      let days = 0;
+      while (dayAcc >= dayMs && days < 4) {
+        dayAcc -= dayMs;
+        days += 1;
+      }
+      if (days > 0) {
+        try {
+          wasm.megacorp_advance(days);
+        } catch (err) {
+          dayAcc = 0;
+        }
+        if (window.showWasmDay) {
+          window.showWasmDay();
+        }
+        if (window.draw) {
+          window.draw();
+        }
       }
     }
     draw();

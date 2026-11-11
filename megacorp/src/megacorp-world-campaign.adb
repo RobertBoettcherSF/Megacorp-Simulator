@@ -53,6 +53,61 @@ package body Megacorp.World.Campaign is
       return Holdings_Of (Item, Corp);
    end Holdings;
 
+   function Income (Population, Tax : Natural) return Natural is
+   begin
+      return Population * Tax / 1000;
+   end Income;
+
+   function Influence (Defence, Tech : Natural) return Natural is
+      Total : constant Natural := Defence + Tech;
+   begin
+      if Total > 255 then
+         return 255;
+      end if;
+      return Total;
+   end Influence;
+
+   function Strength (Item : Atlas; Corp : Positive) return Natural is
+      Total : Natural := 0;
+   begin
+      for I in 1 .. Item.Regions loop
+         if Item.Area (I).Owner = Corp then
+            Total := Total + Item.Area (I).Defence + Item.Area (I).Tech;
+         end if;
+      end loop;
+      return Total;
+   end Strength;
+
+   function Threat (Item : Atlas; Region : Positive) return Integer is
+      Best : Integer := 0;
+      Found : Boolean := False;
+      Value : Integer;
+      Kind : Trait;
+   begin
+      for C in 1 .. Item.Corps loop
+         if C /= Item.Area (Region).Owner
+           and then not Item.Company (C).Eliminated
+           and then Item.Company (C).Cash
+             >= Attack_Cost (Item.Company (C).Kind)
+           and then Adjacent_To_Corp (Item, C, Region)
+         then
+            Kind := Item.Company (C).Kind;
+            Value := Score (Kind, Item.Area (Region));
+            if Kind = Secretive and then Value < 80 then
+               Value := 0;
+            end if;
+            if not Found or else Value > Best then
+               Best := Value;
+               Found := True;
+            end if;
+         end if;
+      end loop;
+      if not Found then
+         return 0;
+      end if;
+      return Best;
+   end Threat;
+
    function Holdings_Of
      (Item : Atlas; Corp : Positive) return Natural
    is

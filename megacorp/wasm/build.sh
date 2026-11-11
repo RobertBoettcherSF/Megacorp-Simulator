@@ -86,6 +86,7 @@ wasm-ld --no-entry --export-memory --allow-undefined \
    --export=megacorp_commit_asset \
    --export=megacorp_command --export=megacorp_play \
    --export=megacorp_city --export=megacorp_city_size \
+   --export=megacorp_brief --export=megacorp_brief_size \
    --export=megacorp_state --export=megacorp_state_size \
    -z stack-size=2097152 \
    megacorp_wasm.o b~megacorp_wasm.o \

@@ -24,6 +24,14 @@ package Megacorp.Save.Log is
    function Due (Book : Journal) return Boolean;
    function Notice (Book : Journal) return String;
 
+   --  Newest border fight, tax change, or mission result.
+   --  Index 1 is the latest. Empty when Index is past the list.
+   function Headline_Count (Book : Journal) return Natural;
+
+   function Headline
+     (Book : Journal;
+      Index : Positive) return String;
+
    function Day_None return Event;
 
    function Day_Tax

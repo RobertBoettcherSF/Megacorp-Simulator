@@ -73,6 +73,9 @@ package Megacorp.Mission.Gen is
    function Build (M : Map.City; Seed : RNG.Word) return Scene
      with Pre => M.Width >= 32 and then M.Height >= 32;
 
+   --  The recipe Build would pick, without generating the city.
+   function Preview (Seed : RNG.Word) return Recipe_Kind;
+
    function Same (A, B : Scene) return Boolean;
 
    function Reachable (M : Map.City; Plan : Scene) return Boolean;
