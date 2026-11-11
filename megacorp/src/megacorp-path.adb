@@ -468,11 +468,6 @@ package body Megacorp.Path is
       Free_Nodes (Nodes);
       Free_Heap (Heap);
       return Answer;
-   exception
-      when others =>
-         Free_Nodes (Nodes);
-         Free_Heap (Heap);
-         raise;
    end Find;
 
 end Megacorp.Path;

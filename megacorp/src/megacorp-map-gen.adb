@@ -1,8 +1,6 @@
 --  SPDX-License-Identifier: MIT
 --  Copyright (c) 2026 Robert Boettcher
 
-with Ada.Containers.Vectors;
-
 package body Megacorp.Map.Gen is
    type Side is (North, East, South, West);
 
@@ -406,9 +404,7 @@ package body Megacorp.Map.Gen is
       type Mark is array (Positive range <>, Positive range <>) of Boolean;
       Seen : Mark (1 .. M.Width, 1 .. M.Height) :=
         (others => (others => False));
-      package Queues is new Ada.Containers.Vectors
-        (Index_Type => Positive, Element_Type => Point);
-      Queue : Queues.Vector;
+      Queue : array (1 .. M.Width * M.Height) of Point;
       Total : Natural := 0;
       Reach : Natural := 0;
       Start : Point := (X => 1, Y => 1);
@@ -439,9 +435,9 @@ package body Megacorp.Map.Gen is
       if Total = 0 then
          return True;
       end if;
-      Queue.Append (Start);
-      Seen (Start.X, Start.Y) := True;
       Reach := 1;
+      Queue (Reach) := Start;
+      Seen (Start.X, Start.Y) := True;
       while Head <= Reach loop
          declare
             Here : constant Point := Queue (Head);
@@ -455,8 +451,8 @@ package body Megacorp.Map.Gen is
                     and then not Seen (Next.X, Next.Y)
                   then
                      Seen (Next.X, Next.Y) := True;
-                     Queue.Append (Next);
                      Reach := Reach + 1;
+                     Queue (Reach) := Next;
                   end if;
                end if;
             end loop;

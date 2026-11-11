@@ -41,7 +41,8 @@ project Megacorp_Lib is
       "Megacorp.Save",
       "Megacorp.Save.Log",
       "Megacorp.Save.Migrate",
-      "Megacorp.API");
+      "Megacorp.API",
+      "Megacorp.Play");
 
    package Compiler is
       for Default_Switches ("Ada") use Switches.Ada;

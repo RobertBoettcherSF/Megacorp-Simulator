@@ -39,4 +39,25 @@ package Megacorp.Wasm_Store is
      with Export,
           Convention => C,
           External_Name => "megacorp_commit_asset";
+
+   --  Item 22. One city command, then a batch of fixed ticks.
+   procedure Command (Code, A, B, C, D, E : Integer)
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_command";
+
+   procedure Play_Ticks (Count : Interfaces.Unsigned_32)
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_play";
+
+   function City_State return System.Address
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_city";
+
+   function City_State_Size return Interfaces.Unsigned_32
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_city_size";
 end Megacorp.Wasm_Store;
