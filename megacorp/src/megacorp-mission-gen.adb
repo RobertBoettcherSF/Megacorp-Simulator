@@ -711,6 +711,30 @@ package body Megacorp.Mission.Gen is
       end loop;
    end Place;
 
+   function Objective (Kind : Recipe_Kind) return String is
+   begin
+      case Kind is
+         when Briefing =>
+            return "Meet the contact, then the zone.";
+         when Snatch =>
+            return "Carry the case to the zone.";
+         when Contract =>
+            return "Sabotage the marked building.";
+      end case;
+   end Objective;
+
+   function Estimate (Kind : Recipe_Kind) return String is
+   begin
+      case Kind is
+         when Briefing =>
+            return "one guard";
+         when Snatch =>
+            return "guard and police";
+         when Contract =>
+            return "heavy guard and police";
+      end case;
+   end Estimate;
+
    function Preview (Seed : RNG.Word) return Recipe_Kind is
       Mission_G : RNG.Generator :=
         RNG.Child (RNG.Make (Seed), RNG.Mission, 1);

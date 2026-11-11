@@ -883,6 +883,275 @@ function readOffice() {
   };
 }
 
+const MENU_ACT = {
+  up: 0,
+  down: 1,
+  activate: 2,
+  back: 3,
+  scenario: 4,
+  free: 5,
+  continue: 6,
+  brief: 7,
+  start: 8,
+  cancel: 9,
+  ack: 10,
+  pause: 11,
+  resume: 12,
+  save: 13,
+  quit: 14,
+  speed: 15,
+  volume: 16,
+  roll: 17,
+  digit: 18,
+  clear: 19,
+  reroll: 20,
+  openNew: 21,
+  settings: 22,
+  credits: 23
+};
+
+function takeText(view, cursor, width) {
+  const length = view.getUint8(cursor);
+  const used = length < width ? length : width;
+  return {
+    text: readAscii(view, cursor + 1, used),
+    cursor: cursor + 1 + width
+  };
+}
+
+function readMenu() {
+  if (!wasmExports || !wasmExports.megacorp_menu) {
+    return null;
+  }
+  const view = new DataView(wasmExports.memory.buffer);
+  let cursor = wasmExports.megacorp_menu();
+  cursor += 1;
+  const screen = view.getUint8(cursor);
+  cursor += 1;
+  const choice = view.getUint8(cursor);
+  cursor += 1;
+  const saved = view.getUint8(cursor) === 1;
+  cursor += 1;
+  const speed = view.getUint8(cursor);
+  cursor += 1;
+  const volume = view.getUint8(cursor);
+  cursor += 1;
+  const mode = view.getUint8(cursor);
+  cursor += 1;
+  const locked = view.getUint8(cursor) === 1;
+  cursor += 1;
+  const region = view.getUint16(cursor, true);
+  cursor += 2;
+  const typed = view.getInt32(cursor, true);
+  cursor += 4;
+  const scenario = view.getUint8(cursor);
+  cursor += 1;
+  const outcome = view.getUint8(cursor);
+  cursor += 1;
+  const casualties = view.getUint8(cursor);
+  cursor += 1;
+  const loot = view.getInt32(cursor, true);
+  cursor += 4;
+  const before = view.getInt32(cursor, true);
+  cursor += 4;
+  const after = view.getInt32(cursor, true);
+  cursor += 4;
+  const reward = view.getUint16(cursor, true);
+  cursor += 2;
+  const objective = takeText(view, cursor, 64);
+  cursor = objective.cursor;
+  const threat = takeText(view, cursor, 32);
+  cursor = threat.cursor;
+  const regionName = takeText(view, cursor, 24);
+  cursor = regionName.cursor;
+  const count = view.getUint8(cursor);
+  cursor += 1;
+  const scenarios = [];
+  for (let i = 0; i < count; i += 1) {
+    const seed = view.getInt32(cursor, true);
+    cursor += 4;
+    const name = takeText(view, cursor, 16);
+    cursor = name.cursor;
+    scenarios.push({ seed, name: name.text });
+  }
+  const creditsN = view.getUint8(cursor);
+  cursor += 1;
+  const credits = [];
+  for (let i = 0; i < creditsN; i += 1) {
+    const line = takeText(view, cursor, 72);
+    cursor = line.cursor;
+    credits.push(line.text);
+  }
+  return {
+    screen, choice, saved, speed, volume, mode, locked, region, typed,
+    scenario, outcome, casualties, loot, before, after, reward,
+    objective: objective.text,
+    threat: threat.text,
+    regionName: regionName.text,
+    scenarios, credits
+  };
+}
+
+let menuStamp = "";
+let playOn = false;
+
+function menuCommand(act, arg) {
+  wasmExports.megacorp_command(12, act, arg || 0, 0, 0, 0);
+  const menu = readMenu();
+  if (menu && (menu.screen === 4 || menu.screen === 6)) {
+    if (!playOn && typeof MegacorpPlay !== "undefined") {
+      MegacorpPlay.start(wasmExports);
+      playOn = true;
+    }
+    if (typeof MegacorpPlay !== "undefined") {
+      MegacorpPlay.setSpeed(menu.speed, false);
+    }
+    showWorld = menu.screen === 4;
+    document.getElementById("world").textContent =
+      showWorld ? "City" : "World map";
+    showWasmDay();
+    draw();
+  }
+  paintMenu();
+}
+
+function addChoice(parent, label, index, picked, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  if (index === picked) {
+    button.className = "picked";
+  }
+  button.addEventListener("click", onClick);
+  parent.appendChild(button);
+}
+
+function paintMenu() {
+  const menu = readMenu();
+  const root = document.getElementById("menu");
+  const body = document.getElementById("menu-body");
+  const title = document.getElementById("menu-title");
+  if (!menu || !root || !body || !title) {
+    return;
+  }
+  const overlay = menu.screen !== 4 && menu.screen !== 6;
+  root.hidden = !overlay;
+  const reroll = document.getElementById("reroll");
+  if (reroll) {
+    reroll.hidden = !(menu.screen === 4 && menu.mode === 1 && !menu.locked);
+  }
+  const stamp = [
+    menu.screen, menu.choice, menu.saved, menu.speed, menu.volume,
+    menu.typed, menu.outcome, menu.loot, menu.regionName, menu.objective
+  ].join(":");
+  if (stamp === menuStamp) {
+    return;
+  }
+  menuStamp = stamp;
+  body.replaceChildren();
+  const names = ["Title", "New game", "Settings", "Credits", "Map",
+    "Briefing", "Mission", "Debrief", "Paused"];
+  title.textContent = names[menu.screen] || "Megacorp";
+  if (menu.screen === 0) {
+    addChoice(body, "New game", 0, menu.choice, () => menuCommand(MENU_ACT.openNew, 0));
+    if (menu.saved) {
+      addChoice(body, "Continue", 1, menu.choice, () => menuCommand(MENU_ACT.continue, 0));
+      addChoice(body, "Settings", 2, menu.choice, () => menuCommand(MENU_ACT.settings, 0));
+      addChoice(body, "Credits", 3, menu.choice, () => menuCommand(MENU_ACT.credits, 0));
+    } else {
+      addChoice(body, "Settings", 1, menu.choice, () => menuCommand(MENU_ACT.settings, 0));
+      addChoice(body, "Credits", 2, menu.choice, () => menuCommand(MENU_ACT.credits, 0));
+    }
+  } else if (menu.screen === 1) {
+    menu.scenarios.forEach((item, index) => {
+      addChoice(
+        body,
+        `Scenario ${item.name} (seed ${item.seed})`,
+        index,
+        menu.choice,
+        () => menuCommand(MENU_ACT.scenario, index + 1)
+      );
+    });
+    addChoice(body, "Roll a free-play seed", 3, menu.choice, () => menuCommand(MENU_ACT.roll, 0));
+    addChoice(
+      body,
+      `Start free play ${menu.typed}`,
+      4,
+      menu.choice,
+      () => menuCommand(MENU_ACT.free, menu.typed)
+    );
+    addChoice(body, "Back", 5, menu.choice, () => menuCommand(MENU_ACT.back, 0));
+    const hint = document.createElement("p");
+    hint.textContent = "Type a seed, or roll one. A scenario locks the world.";
+    body.appendChild(hint);
+  } else if (menu.screen === 2) {
+    ["Pause", "Speed 1x", "Speed 2x", "Speed 4x"].forEach((label, index) => {
+      addChoice(body, label, index, menu.choice, () => menuCommand(MENU_ACT.speed, [0, 1, 2, 4][index]));
+    });
+    addChoice(body, "Quieter", 4, menu.choice, () => {
+      menuCommand(MENU_ACT.volume, Math.max(0, menu.volume - 10));
+    });
+    addChoice(body, "Louder", 5, menu.choice, () => {
+      menuCommand(MENU_ACT.volume, Math.min(100, menu.volume + 10));
+    });
+    addChoice(body, "Back", 6, menu.choice, () => menuCommand(MENU_ACT.back, 0));
+    const sound = document.createElement("p");
+    sound.textContent = `Sound volume ${menu.volume}. Playback waits for a later version.`;
+    body.appendChild(sound);
+  } else if (menu.screen === 3) {
+    menu.credits.forEach((line) => {
+      const row = document.createElement("p");
+      row.textContent = line;
+      body.appendChild(row);
+    });
+    addChoice(body, "Back", 0, menu.choice, () => menuCommand(MENU_ACT.back, 0));
+  } else if (menu.screen === 5) {
+    const info = document.createElement("p");
+    info.textContent =
+      `${menu.regionName}. ${menu.objective} Enemy estimate: ${menu.threat}.`
+      + ` Reward ${menu.reward}.`;
+    body.appendChild(info);
+    const office = readOffice();
+    if (office) {
+      office.roster.forEach((agent) => {
+        const row = document.createElement("p");
+        row.textContent =
+          `${agent.name} ${agent.alive ? "ready" : "dead"}`
+          + ` ${agent.weapon} aug ${agent.augments} arm ${agent.armour}`;
+        body.appendChild(row);
+      });
+      const squad = document.createElement("p");
+      squad.textContent = `Squad ${office.picks.join(" ")}`;
+      body.appendChild(squad);
+    }
+    addChoice(body, "Start", 0, menu.choice, () => menuCommand(MENU_ACT.start, 0));
+    addChoice(body, "Cancel", 1, menu.choice, () => menuCommand(MENU_ACT.cancel, 0));
+  } else if (menu.screen === 7) {
+    const word = menu.outcome === 2 ? "won" : (menu.outcome === 3 ? "lost" : "timeout");
+    const info = document.createElement("p");
+    info.textContent =
+      `Outcome ${word}. Casualties ${menu.casualties}.`
+      + ` Loot ${menu.loot}. Funds ${menu.before} to ${menu.after}.`;
+    body.appendChild(info);
+    addChoice(body, "Return to the map", 0, menu.choice, () => menuCommand(MENU_ACT.ack, 0));
+  } else if (menu.screen === 8) {
+    addChoice(body, "Resume", 0, menu.choice, () => menuCommand(MENU_ACT.resume, 0));
+    addChoice(body, "Save", 1, menu.choice, () => menuCommand(MENU_ACT.save, 0));
+    addChoice(body, "Quit to title", 2, menu.choice, () => menuCommand(MENU_ACT.quit, 0));
+  }
+  root.dataset.screen = String(menu.screen);
+  root.dataset.outcome = String(menu.outcome);
+  root.dataset.loot = String(menu.loot);
+  root.dataset.casualties = String(menu.casualties);
+  root.dataset.before = String(menu.before);
+  root.dataset.after = String(menu.after);
+  root.dataset.saved = menu.saved ? "yes" : "no";
+  root.dataset.region = menu.regionName;
+  root.dataset.objective = menu.objective;
+  root.dataset.threat = menu.threat;
+  root.dataset.reward = String(menu.reward);
+}
+
 function paintOffice() {
   const office = readOffice();
   const finance = document.getElementById("finance-panel");
@@ -1398,9 +1667,10 @@ async function main() {
         + ` · city seed ${region.city_seed}`;
       showStrategic(region.id);
       if (wasmLive && wasmExports && wasmExports.megacorp_command) {
-        wasmExports.megacorp_command(6, region.id, 0, 0, 0, 0);
-        document.getElementById("objective").textContent =
-          `${region.name}: mission starting`;
+        const menu = readMenu();
+        if (menu && menu.screen === 4) {
+          menuCommand(MENU_ACT.brief, region.id);
+        }
         return;
       }
       showWorld = false;
@@ -1500,19 +1770,54 @@ async function main() {
       wasmExports.megacorp_reset(42);
     }
     wasmLive = true;
-    showWorld = true;
-    document.getElementById("world").textContent = "City";
-    document.getElementById("hover").textContent = "Hover a region.";
-    if (typeof MegacorpPlay !== "undefined") {
-      MegacorpPlay.start(wasmExports);
-    }
-    showWasmDay();
-    draw();
+    showWorld = false;
+    window.menuSetSpeed = (next) => {
+      wasmExports.megacorp_command(12, MENU_ACT.speed, next, 0, 0, 0);
+      paintMenu();
+    };
+    paintMenu();
     document.getElementById("new-world").addEventListener("click", () => {
-      wasmExports.megacorp_reset(42);
-      showWasmDay();
-      if (showWorld) {
+      menuCommand(MENU_ACT.openNew, 0);
+    });
+    document.getElementById("game-menu").addEventListener("click", () => {
+      menuCommand(MENU_ACT.pause, 0);
+    });
+    document.getElementById("reroll").addEventListener("click", () => {
+      if (strategicId > 0) {
+        menuCommand(MENU_ACT.reroll, strategicId);
+        showWasmDay();
         draw();
+      }
+    });
+    window.addEventListener("keydown", (event) => {
+      const menu = readMenu();
+      if (!menu) {
+        return;
+      }
+      const overlay = menu.screen !== 4 && menu.screen !== 6;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        menuCommand(overlay ? MENU_ACT.back : MENU_ACT.pause, 0);
+        return;
+      }
+      if (!overlay) {
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        menuCommand(MENU_ACT.up, 0);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        menuCommand(MENU_ACT.down, 0);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        menuCommand(MENU_ACT.activate, 0);
+      } else if (menu.screen === 1 && event.key >= "0" && event.key <= "9") {
+        event.preventDefault();
+        menuCommand(MENU_ACT.digit, Number(event.key));
+      } else if (menu.screen === 1 && event.key === "Backspace") {
+        event.preventDefault();
+        menuCommand(MENU_ACT.clear, 0);
       }
     });
     document.getElementById("import-asset").addEventListener("change", async (event) => {

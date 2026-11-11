@@ -38,6 +38,7 @@ project Megacorp_Lib is
       "Megacorp.Agents",
       "Megacorp.Research",
       "Megacorp.Session",
+      "Megacorp.Menu",
       "Megacorp.Save",
       "Megacorp.Save.Log",
       "Megacorp.Save.Migrate",

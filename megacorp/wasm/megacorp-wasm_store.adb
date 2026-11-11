@@ -6,6 +6,7 @@ with Megacorp.API;
 with Megacorp.Assets.Import;
 with Megacorp.Data.Virtual_FS;
 with Megacorp.Data.Virtual_FS.Browser;
+with Megacorp.Menu;
 with Megacorp.Mission.Gen;
 with Megacorp.Parameters;
 with Megacorp.Play;
@@ -20,6 +21,9 @@ with Megacorp.World.Gen;
 
 package body Megacorp.Wasm_Store is
    use type RNG.Word;
+   use type Parameters.Play_Mode;
+   use type Menu.Screen;
+   use type Menu.Action;
 
    package Host_Files renames Megacorp.Data.Virtual_FS.Browser;
 
@@ -37,8 +41,24 @@ package body Megacorp.Wasm_Store is
    Brief_Used : Natural := 0;
    Office_Buf : array (0 .. Office_Max - 1) of Octet := (others => 0);
    Office_Used : Natural := 0;
+   Menu_Max : constant := 1024;
+   Menu_Buf : array (0 .. Menu_Max - 1) of Octet := (others => 0);
+   Menu_Used : Natural := 0;
+   Card : Menu.Card;
+   World_Ready : Boolean := False;
 
-   procedure Fresh (Seed : Interfaces.Unsigned_32);
+   procedure Fresh
+     (Seed : Interfaces.Unsigned_32;
+      Mode : Parameters.Play_Mode);
+   procedure Write_Menu;
+   procedure Save_Game;
+   procedure Load_Game;
+   procedure Launch_Mission;
+   procedure Try_Reroll;
+   procedure Apply_Menu (Act : Menu.Action; Arg : Integer);
+   procedure Load_Prefs;
+   procedure Store_Prefs;
+   function Roster_Alive return Natural;
    procedure Note (Ev : Save.Log.Event);
    procedure Refresh;
    procedure Put_B (Value : Natural);
@@ -196,6 +216,143 @@ package body Megacorp.Wasm_Store is
       end if;
    end Write_Office;
 
+   procedure Put_M (Value : Natural) is
+   begin
+      if Menu_Used >= Menu_Max then
+         return;
+      end if;
+      Menu_Buf (Menu_Used) := Octet (Value mod 256);
+      Menu_Used := Menu_Used + 1;
+   end Put_M;
+
+   procedure Put_M16 (Value : Natural) is
+      Stored : Natural := Value;
+   begin
+      if Stored > 65535 then
+         Stored := 65535;
+      end if;
+      Put_M (Stored mod 256);
+      Put_M (Stored / 256);
+   end Put_M16;
+
+   procedure Put_M32 (Value : Integer) is
+      Bits : Interfaces.Unsigned_32;
+      use type Interfaces.Unsigned_32;
+   begin
+      if Value >= 0 then
+         Bits := Interfaces.Unsigned_32 (Value);
+      else
+         Bits := 0 - Interfaces.Unsigned_32 (-Value);
+      end if;
+      for Drop in 1 .. 4 loop
+         Put_M (Natural (Bits and 16#FF#));
+         Bits := Bits / 256;
+      end loop;
+   end Put_M32;
+
+   procedure Put_M_Text (Item : String; Width : Natural) is
+      Last : Natural := Item'Length;
+   begin
+      if Last > Width then
+         Last := Width;
+      end if;
+      Put_M (Last);
+      for I in 1 .. Width loop
+         if I <= Last then
+            Put_M (Character'Pos (Item (Item'First + I - 1)));
+         else
+            Put_M (0);
+         end if;
+      end loop;
+   end Put_M_Text;
+
+   function Roster_Alive return Natural is
+      Total : Natural := 0;
+   begin
+      for I in 1 .. Snap.Roster_Count loop
+         if Snap.Roster (I).Alive then
+            Total := Total + 1;
+         end if;
+      end loop;
+      return Total;
+   end Roster_Alive;
+
+   procedure Write_Menu is
+      Kind : Mission.Gen.Recipe_Kind;
+      Reward : Natural := 0;
+      Region_Name : String (1 .. 24) := (others => ' ');
+      Name_Len : Natural := 0;
+   begin
+      Menu_Used := 0;
+      Put_M (1);
+      Put_M (Menu.Screen'Pos (Card.Where));
+      Put_M (Card.Cursor);
+      if Card.Saved then
+         Put_M (1);
+      else
+         Put_M (0);
+      end if;
+      Put_M (Card.Speed);
+      Put_M (Card.Volume);
+      if World_Ready and then Snap.Play = Parameters.Scenario then
+         Put_M (0);
+      elsif World_Ready and then Snap.Play = Parameters.Free_Play then
+         Put_M (1);
+      else
+         Put_M (2);
+      end if;
+      if World_Ready and then Snap.Locked then
+         Put_M (1);
+      else
+         Put_M (0);
+      end if;
+      Put_M16 (Card.Region);
+      Put_M32 (Card.Typed);
+      Put_M (Card.Scenario);
+      Put_M (Card.Outcome);
+      Put_M (Card.Dead);
+      Put_M32 (Card.Loot);
+      Put_M32 (Card.Before);
+      Put_M32 (Card.After);
+      if World_Ready
+        and then Card.Region >= 1
+        and then Card.Region <= Globe.Regions
+      then
+         Kind := Mission.Gen.Preview (Globe.Area (Card.Region).City);
+         Reward := Session.Loot_Base + World.Campaign.Income
+           (Globe.Area (Card.Region).Population,
+            Globe.Area (Card.Region).Tax);
+         Name_Len := Globe.Area (Card.Region).Title.Length;
+         if Name_Len > 24 then
+            Name_Len := 24;
+         end if;
+         if Name_Len > 0 then
+            Region_Name (1 .. Name_Len) :=
+              Globe.Area (Card.Region).Title.Text (1 .. Name_Len);
+         end if;
+         Put_M16 (Reward);
+         Put_M_Text (Mission.Gen.Objective (Kind), 64);
+         Put_M_Text (Mission.Gen.Estimate (Kind), 32);
+         Put_M_Text (Region_Name (1 .. Name_Len), 24);
+      else
+         Put_M16 (0);
+         Put_M_Text ("", 64);
+         Put_M_Text ("", 32);
+         Put_M_Text ("", 24);
+      end if;
+      Put_M (Menu.Scenario_Count);
+      for I in 1 .. Menu.Scenario_Count loop
+         Put_M32 (Menu.Scenario_Seed (I));
+         Put_M_Text (Menu.Scenario_Name (I), 16);
+      end loop;
+      Put_M (3);
+      Put_M_Text ("Source code is MIT.", 72);
+      Put_M_Text
+        ("AdaWebPack libgnat is GPL-3.0 with the GCC Runtime", 72);
+      Put_M_Text
+        ("Library Exception 3.1, so this project stays MIT.", 72);
+   end Write_Menu;
+
    procedure Put_Name (Item : String) is
       Last : Natural;
    begin
@@ -303,6 +460,10 @@ package body Megacorp.Wasm_Store is
       Save.Log.Commit
         (Files, "slot.log", Snap, Globe, Book, Ev);
       if Play.Needs_Settle then
+         declare
+            Funds_Before : constant Integer := Snap.Funds;
+            Alive_Before : constant Natural := Roster_Alive;
+         begin
          Play.Settle (Globe, Snap);
          if Play.Mission_Ending = 2 then
             Result := Save.Mission_Outcome'First;
@@ -325,8 +486,14 @@ package body Megacorp.Wasm_Store is
             Save.Log.Payoff
               (Positive (Play.Mission_Region), Result));
          API.Install (Globe, Snap.Day);
+         Menu.Note_Result
+           (Card, Play.Mission_Ending,
+            Alive_Before - Roster_Alive,
+            Funds_Before, Snap.Funds);
+         end;
       end if;
       Refresh;
+      Write_Menu;
       if Save.Log.Due (Book) then
          if Play.Ready then
             Play.Write (Files, "city.mgc");
@@ -336,48 +503,216 @@ package body Megacorp.Wasm_Store is
       end if;
    end Note;
 
-   procedure Fresh (Seed : Interfaces.Unsigned_32) is
+   procedure Fresh
+     (Seed : Interfaces.Unsigned_32;
+      Mode : Parameters.Play_Mode)
+   is
    begin
       Globe := World.Gen.Generate
         (RNG.Word (Seed), Parameters.Defaults);
-      Snap := Save.Capture
-        (Globe, 0, Parameters.Auto_Play);
+      Snap := Save.Capture (Globe, 0, Mode);
       Save.Store (Files, "slot.mgc", Snap);
       Book := Save.Log.Start (Files, "slot.log", Snap);
       Play.Open (Globe.Area (Globe.Company (1).Home).City);
       Play.Write (Files, "city.mgc");
       API.Install (Globe, Snap.Day);
+      World_Ready := True;
+      Card.Saved := True;
       Refresh;
+      Write_Menu;
    end Fresh;
 
-   procedure Boot (Seed : Interfaces.Unsigned_32) is
+   procedure Save_Game is
    begin
-      if Host_Files.Exists (Files, "slot.mgc") then
-         begin
-            Snap := Save.Load (Files, "slot.mgc");
-            Globe := Save.Rebuild (Snap, Parameters.Defaults);
-            Open_City;
-            if Host_Files.Exists (Files, "slot.log") then
-               Book := Save.Log.Load (Files, "slot.log");
-               Save.Log.Replay (Snap, Globe, Book);
-            else
-               Book := Save.Log.Start (Files, "slot.log", Snap);
-            end if;
-            API.Install (Globe, Snap.Day);
-      Refresh;
-         exception
-            when others =>
-               Fresh (Seed);
-         end;
-      else
-         Fresh (Seed);
+      if not World_Ready then
+         return;
       end if;
+      if Play.Ready then
+         Play.Write (Files, "city.mgc");
+      end if;
+      Save.Log.Compact
+        (Files, "slot.mgc", "slot.log", Snap, Book);
+      Store_Prefs;
+      Card.Saved := True;
+   end Save_Game;
+
+   procedure Load_Game is
+   begin
+      Snap := Save.Load (Files, "slot.mgc");
+      Globe := Save.Rebuild (Snap, Parameters.Defaults);
+      Open_City;
+      if Host_Files.Exists (Files, "slot.log") then
+         Book := Save.Log.Load (Files, "slot.log");
+         Save.Log.Replay (Snap, Globe, Book);
+      else
+         Book := Save.Log.Start (Files, "slot.log", Snap);
+      end if;
+      API.Install (Globe, Snap.Day);
+      World_Ready := True;
+      Card.Saved := True;
+      Menu.Arrive (Card, Menu.Atlas);
+      Refresh;
+      Write_Menu;
+   end Load_Game;
+
+   procedure Launch_Mission is
+      Region : Positive;
+      Seed : RNG.Word;
+      Lo : Integer;
+      Hi : Integer;
+   begin
+      if not World_Ready
+        or else Card.Region < 1
+        or else Card.Region > Globe.Regions
+      then
+         return;
+      end if;
+      Region := Card.Region;
+      Seed := Globe.Area (Region).City;
+      Lo := Integer (Seed and 16#7FFF_FFFF#);
+      Hi := Integer ((Seed / 2 ** 31) and 16#7FFF_FFFF#);
+      Note (Save.Log.Order (6, Region, Lo, Hi, 0, 0));
+      Menu.Arrive (Card, Menu.Field);
+   end Launch_Mission;
+
+   procedure Try_Reroll is
+   begin
+      if not World_Ready
+        or else Card.Region < 1
+        or else Card.Region > Globe.Regions
+      then
+         return;
+      end if;
+      if Parameters.Region_May_Reroll
+        (Snap.Play, Snap.Area (Card.Region).Visited)
+      then
+         Note (Save.Log.Reroll (Snap, Globe, Card.Region));
+      end if;
+   end Try_Reroll;
+
+   procedure Load_Prefs is
+      function Number_After (Text, Key : String) return Integer;
+      function Number_After (Text, Key : String) return Integer is
+         Mark : Natural := Text'First;
+         Start : Natural;
+         Value : Natural := 0;
+         Found : Boolean := False;
+      begin
+         while Mark + Key'Length - 1 <= Text'Last loop
+            if Text (Mark .. Mark + Key'Length - 1) = Key then
+               Start := Mark + Key'Length;
+               while Start <= Text'Last
+                 and then Text (Start) = ' '
+               loop
+                  Start := Start + 1;
+               end loop;
+               while Start <= Text'Last
+                 and then Text (Start) in '0' .. '9'
+               loop
+                  Value := Value * 10
+                    + (Character'Pos (Text (Start))
+                       - Character'Pos ('0'));
+                  Found := True;
+                  Start := Start + 1;
+               end loop;
+               if Found then
+                  return Integer (Value);
+               end if;
+            end if;
+            Mark := Mark + 1;
+         end loop;
+         return -1;
+      end Number_After;
+      Text : constant String :=
+        (if Host_Files.Exists (Files, "prefs.txt")
+         then Host_Files.Read (Files, "prefs.txt")
+         else "");
+      Speed : constant Integer := Number_After (Text, "speed");
+      Volume : constant Integer := Number_After (Text, "volume");
+   begin
+      if Speed = 0 or else Speed = 1 or else Speed = 2
+        or else Speed = 4
+      then
+         Card.Speed := Speed;
+      end if;
+      if Volume >= 0 and then Volume <= 100 then
+         Card.Volume := Volume;
+      end if;
+   end Load_Prefs;
+
+   procedure Store_Prefs is
+      function Trim (Value : Natural) return String;
+      function Trim (Value : Natural) return String is
+         Image : constant String := Natural'Image (Value);
+      begin
+         return Image (Image'First + 1 .. Image'Last);
+      end Trim;
+      Text : constant String :=
+        "speed " & Trim (Card.Speed) & ASCII.LF
+        & "volume " & Trim (Card.Volume) & ASCII.LF;
+   begin
+      Host_Files.Write (Files, "prefs.txt", Text);
+   end Store_Prefs;
+
+   procedure Apply_Menu (Act : Menu.Action; Arg : Integer) is
+      Effect : constant Menu.Effect := Menu.Handle (Card, Act, Arg);
+   begin
+      case Effect is
+         when Menu.Stay =>
+            null;
+         when Menu.Make_Scenario =>
+            Fresh
+              (Interfaces.Unsigned_32
+                 (Menu.Scenario_Seed (Card.Scenario)),
+               Parameters.Scenario);
+            Menu.Arrive (Card, Menu.Atlas);
+         when Menu.Make_Free =>
+            Fresh
+              (Interfaces.Unsigned_32 (Menu.Free_Seed (Card)),
+               Parameters.Free_Play);
+            Menu.Arrive (Card, Menu.Atlas);
+         when Menu.Load_Continue =>
+            begin
+               Load_Game;
+            exception
+               when others =>
+                  Card.Where := Menu.Title;
+                  World_Ready := False;
+            end;
+         when Menu.Launch =>
+            Launch_Mission;
+         when Menu.Write_Disk =>
+            Save_Game;
+         when Menu.Leave_Game =>
+            Save_Game;
+            Menu.Arrive (Card, Menu.Title);
+         when Menu.Reroll =>
+            Try_Reroll;
+      end case;
+      if Act = Menu.Set_Speed or else Act = Menu.Set_Volume then
+         Store_Prefs;
+      end if;
+      Write_Menu;
+   end Apply_Menu;
+
+   procedure Boot (Seed : Interfaces.Unsigned_32) is
+      pragma Unreferenced (Seed);
+   begin
+      Load_Prefs;
+      Card.Saved := Host_Files.Exists (Files, "slot.mgc");
+      Card.Where := Menu.Title;
+      Card.Cursor := 0;
+      World_Ready := False;
+      Write_Menu;
    end Boot;
 
    procedure Advance (Days : Interfaces.Unsigned_32) is
       type Owner_List is array (1 .. Parameters.Max_Regions) of Positive;
       Old : Owner_List := (others => 1);
    begin
+      if not World_Ready or else Card.Where /= Menu.Atlas then
+         return;
+      end if;
       for Drop in 1 .. Natural (Days) loop
          for I in 1 .. Globe.Regions loop
             Old (I) := Globe.Area (I).Owner;
@@ -394,7 +729,9 @@ package body Megacorp.Wasm_Store is
 
    procedure Reset (Seed : Interfaces.Unsigned_32) is
    begin
-      Fresh (Seed);
+      Fresh (Seed, Parameters.Auto_Play);
+      Menu.Arrive (Card, Menu.Atlas);
+      Write_Menu;
    end Reset;
 
    function Import_Buffer return System.Address is
@@ -454,6 +791,24 @@ package body Megacorp.Wasm_Store is
       Lo : Integer;
       Hi : Integer;
    begin
+      if Code = 12 then
+         if A >= 0
+           and then A <= Menu.Action'Pos (Menu.Action'Last)
+         then
+            Apply_Menu (Menu.Action'Val (A), B);
+         end if;
+         return;
+      end if;
+      if not World_Ready then
+         return;
+      end if;
+      if Code = 6 then
+         if Card.Where = Menu.Briefing then
+            Launch_Mission;
+            Write_Menu;
+         end if;
+         return;
+      end if;
       if Code = 7 then
          if Session.Can_Hire (Snap) then
             Note (Save.Log.Hire_Agent (Snap));
@@ -501,6 +856,9 @@ package body Megacorp.Wasm_Store is
    procedure Play_Ticks (Count : Interfaces.Unsigned_32) is
       use type Interfaces.Unsigned_32;
    begin
+      if not World_Ready or else Card.Where /= Menu.Field then
+         return;
+      end if;
       if Count < 1 or else Count > 32 then
          return;
       end if;
@@ -536,4 +894,14 @@ package body Megacorp.Wasm_Store is
    begin
       return Interfaces.Unsigned_32 (Office_Used);
    end Office_Size;
+
+   function Menu_State return System.Address is
+   begin
+      return Menu_Buf'Address;
+   end Menu_State;
+
+   function Menu_State_Size return Interfaces.Unsigned_32 is
+   begin
+      return Interfaces.Unsigned_32 (Menu_Used);
+   end Menu_State_Size;
 end Megacorp.Wasm_Store;

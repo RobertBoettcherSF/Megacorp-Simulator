@@ -82,4 +82,15 @@ package Megacorp.Wasm_Store is
      with Export,
           Convention => C,
           External_Name => "megacorp_office_size";
+
+   --  Item 26. The current menu. JavaScript only draws it.
+   function Menu_State return System.Address
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_menu";
+
+   function Menu_State_Size return Interfaces.Unsigned_32
+     with Export,
+          Convention => C,
+          External_Name => "megacorp_menu_size";
 end Megacorp.Wasm_Store;
